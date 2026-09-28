@@ -2,39 +2,34 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
-// Definimos el pin del LED (PlatformIO suele tener mapeado LED_BUILTIN, 
-// pero en muchas ESP32-S3 suele ser el pin 2 o 48). 
-#ifndef LED_BUILTIN
-#define LED_BUILTIN 2
-#endif
+// En la mayoría de ESP32 clásicos, el LED azul está directamente en el pin 2
+const int LED_PIN = 2;
 
-// Estructura super simple para esta prueba
 typedef struct struct_message {
-    int id_mensaje; // Un simple contador
+    int id_mensaje; 
 } struct_message;
 
 struct_message myData;
 
-// Callback al recibir datos
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     memcpy(&myData, incomingData, sizeof(myData));
     
     Serial.print("RECIBIDO - Mensaje #");
     Serial.println(myData.id_mensaje);
 
-    // Hacer parpadear el LED
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(100); // Espera de 100ms
-    digitalWrite(LED_BUILTIN, LOW);
+    // Hacer parpadear el LED (más tiempo para que se note)
+    digitalWrite(LED_PIN, HIGH);
+    delay(250); 
+    digitalWrite(LED_PIN, LOW);
 }
 
 void setup() {
     Serial.begin(115200);
-    delay(2000); // Esperar que inicie el serial
+    delay(2000); 
     
-    // Configurar LED
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW); // Apagado por defecto
+    // Configurar explícitamente el pin 2
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
 
     WiFi.mode(WIFI_STA);
 
@@ -54,6 +49,5 @@ void setup() {
 }
 
 void loop() {
-    // No necesitamos nada en el loop para esta prueba
     delay(100);
 }

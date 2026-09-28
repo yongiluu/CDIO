@@ -2,14 +2,11 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
-#ifndef LED_BUILTIN
-#define LED_BUILTIN 2
-#endif
+const int LED_PIN = 2;
 
-// ¡RECUERDA CAMBIAR ESTO POR LA MAC DEL RECEPTOR!
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+// MAC del receptor_RX ya configurada
+uint8_t broadcastAddress[] = {0x68, 0x09, 0x47, 0x9F, 0x19, 0x60};
 
-// Misma estructura sencilla
 typedef struct struct_message {
     int id_mensaje;
 } struct_message;
@@ -19,15 +16,13 @@ esp_now_peer_info_t peerInfo;
 
 int contador = 1;
 
-// Callback al enviar datos
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
     if (status == ESP_NOW_SEND_SUCCESS) {
-        Serial.println("Entrega OK!");
+        Serial.println("Entrega OK! 💡");
         
-        // Parpadear el LED porque se entregó con éxito
-        digitalWrite(LED_BUILTIN, HIGH);
-        delay(100);
-        digitalWrite(LED_BUILTIN, LOW);
+        digitalWrite(LED_PIN, HIGH);
+        delay(250);
+        digitalWrite(LED_PIN, LOW);
     } else {
         Serial.println("Fallo al entregar (¿El carrito está apagado?)");
     }
@@ -37,9 +32,8 @@ void setup() {
     Serial.begin(115200);
     delay(2000);
     
-    // Configurar LED
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW);
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
 
     WiFi.mode(WIFI_STA);
     
@@ -73,6 +67,6 @@ void loop() {
     
     contador++;
     
-    // Enviar un mensaje cada 1 segundo (1000ms) para que se vea claro el parpadeo
-    delay(1000);
+    // Aumenté el tiempo de espera a 1.5s para que se vea claro que el led se apaga y se vuelve a prender.
+    delay(1500); 
 }
