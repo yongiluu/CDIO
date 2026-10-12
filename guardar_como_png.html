@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Descargador PNG</title>
+</head>
+<body style="font-family: sans-serif; text-align: center; padding: 50px;">
+  <h2>Preparando tu imagen PNG...</h2>
+  <p>Si la descarga no empieza automáticamente, haz click en la imagen para descargarla.</p>
+  
+  <canvas id="canvas" style="display:none;"></canvas>
+  <img id="preview" style="max-width: 100%; border: 1px solid #ccc; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer;" />
+
+  <script>
+    // El mismo código SVG pero como texto
+    const svgCode = `<svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" style="font-family: system-ui, -apple-system, sans-serif;">
+  <style>
+    .connection-line { stroke: #6b7280; stroke-width: 2; stroke-dasharray: 6 4; }
+    .connection-line-solid { stroke: #6b7280; stroke-width: 2; }
+    .block { fill: #ffffff; stroke: #e5e7eb; stroke-width: 1.5; rx: 12; }
+    .block-accent { fill: #0284c7; stroke: #0284c7; stroke-width: 1.5; rx: 12; }
+    .label-main { fill: #1a1a1a; font-size: 14px; font-weight: 600; }
+    .label-sub { fill: #6b7280; font-size: 11px; }
+    .label-accent { fill: #ffffff; font-size: 13px; font-weight: 600; }
+    .label-tiny { fill: #6b7280; font-size: 10px; font-style: italic; }
+    .section-label { fill: #1a1a1a; font-size: 16px; font-weight: 700; }
+    .zone { fill: none; stroke: #cbd5e1; stroke-width: 1; stroke-dasharray: 8 4; rx: 16; }
+    .zone-fill { fill: #ffffff; opacity: 0.5; }
+    .arrow { fill: #6b7280; }
+    .link-label-bg { fill: #fcfcfc; }
+    .legend-box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1; rx: 10; }
+  </style>
+  <rect width="100%" height="100%" fill="#fcfcfc"/>
+  <rect class="zone-fill" x="10" y="50" width="370" height="400" rx="16"/>
+  <rect class="zone" x="10" y="50" width="370" height="400"/>
+  <text class="section-label" x="30" y="80">RX (Auto)</text>
+  <rect class="block-accent" x="60" y="100" width="270" height="50"/>
+  <text class="label-accent" x="195" y="130" text-anchor="middle">RX — ESP32 (Auto)</text>
+  <line class="connection-line-solid" x1="120" y1="150" x2="120" y2="200"/>
+  <polygon class="arrow" points="120,200 115,192 125,192"/>
+  <line class="connection-line-solid" x1="270" y1="150" x2="270" y2="200"/>
+  <polygon class="arrow" points="270,200 265,192 275,192"/>
+  <text class="label-tiny" x="17" y="180">Telemetría local</text>
+  <text class="label-tiny" x="283" y="180">Señales PWM</text>
+  <rect class="block" x="50" y="200" width="140" height="50"/>
+  <text class="label-main" x="120" y="222" text-anchor="middle">Sensores</text>
+  <text class="label-sub" x="120" y="238" text-anchor="middle">Batería, etc.</text>
+  <rect class="block" x="200" y="200" width="140" height="50"/>
+  <text class="label-main" x="270" y="222" text-anchor="middle">Puente H</text>
+  <text class="label-sub" x="270" y="238" text-anchor="middle">L298N / TB6612</text>
+  <line class="connection-line-solid" x1="270" y1="250" x2="270" y2="310"/>
+  <polygon class="arrow" points="270,310 265,302 275,302"/>
+  <rect class="block" x="200" y="310" width="140" height="50"/>
+  <text class="label-main" x="270" y="332" text-anchor="middle">Motores</text>
+  <text class="label-sub" x="270" y="348" text-anchor="middle">DC / Servos</text>
+  <rect class="block" x="50" y="310" width="140" height="50"/>
+  <text class="label-main" x="120" y="332" text-anchor="middle">Batería</text>
+  <text class="label-sub" x="120" y="348" text-anchor="middle">LiPo / 18650</text>
+  <line class="connection-line-solid" x1="120" y1="310" x2="120" y2="250"/>
+  <text class="label-tiny" x="17" y="285">Alimentación</text>
+  <text class="label-main" x="490" y="90" text-anchor="middle" style="font-size:13px">ESP-NOW</text>
+  <text class="label-sub" x="490" y="104" text-anchor="middle">(WiFi P2P)</text>
+  <line class="connection-line" x1="330" y1="125" x2="600" y2="125"/>
+  <polygon class="arrow" points="595,125 587,120 587,130"/>
+  <polygon class="arrow" points="335,125 343,120 343,130"/>
+  <text class="label-tiny" x="490" y="145" text-anchor="middle">Comandos → / ← Telemetría</text>
+  <rect class="zone-fill" x="580" y="50" width="370" height="400" rx="16"/>
+  <rect class="zone" x="580" y="50" width="370" height="400"/>
+  <text class="section-label" x="600" y="80">TX (Base)</text>
+  <rect class="block-accent" x="640" y="100" width="260" height="50"/>
+  <text class="label-accent" x="770" y="130" text-anchor="middle">TX — ESP32 (Base)</text>
+  <line class="connection-line-solid" x1="770" y1="150" x2="770" y2="220"/>
+  <polygon class="arrow" points="770,215 765,207 775,207"/>
+  <polygon class="arrow" points="770,155 765,163 775,163"/>
+  <rect class="link-label-bg" x="780" y="174" width="75" height="20" rx="6"/>
+  <text class="label-sub" x="818" y="188" text-anchor="middle">USB/Serial</text>
+  <rect class="block" x="640" y="220" width="260" height="55"/>
+  <text class="label-main" x="770" y="245" text-anchor="middle">Notebook / PC</text>
+  <text class="label-sub" x="770" y="262" text-anchor="middle">Procesamiento de datos</text>
+  <rect class="block" x="600" y="320" width="160" height="50"/>
+  <text class="label-main" x="680" y="342" text-anchor="middle">Control / Joystick</text>
+  <text class="label-sub" x="680" y="357" text-anchor="middle">Gamepad / Pots</text>
+  <line class="connection-line-solid" x1="680" y1="275" x2="680" y2="320"/>
+  <polygon class="arrow" points="680,275 675,283 685,283"/>
+  <text class="label-tiny" x="690" y="302">Inputs</text>
+  <rect class="block" x="780" y="320" width="160" height="50"/>
+  <text class="label-main" x="860" y="342" text-anchor="middle">Dashboard</text>
+  <text class="label-sub" x="860" y="357" text-anchor="middle">Telemetría en vivo</text>
+  <line class="connection-line-solid" x1="860" y1="275" x2="860" y2="320"/>
+  <polygon class="arrow" points="860,320 855,312 865,312"/>
+  <text class="label-tiny" x="870" y="302">Datos</text>
+  <rect class="legend-box" x="220" y="475" width="520" height="110"/>
+  <text class="label-main" x="480" y="500" text-anchor="middle" style="font-size:13px">Leyenda</text>
+  <line class="connection-line" x1="260" y1="522" x2="310" y2="522"/>
+  <text class="label-sub" x="325" y="526">Enlace inalámbrico (ESP-NOW)</text>
+  <line class="connection-line-solid" x1="260" y1="546" x2="310" y2="546"/>
+  <text class="label-sub" x="325" y="550">Conexión física (cable / PCB)</text>
+  <rect class="block-accent" x="520" y="514" width="50" height="16" style="rx:4"/>
+  <text class="label-sub" x="580" y="526">ESP32</text>
+  <rect class="block" x="520" y="538" width="50" height="16" style="rx:4"/>
+  <text class="label-sub" x="580" y="550">Componente / Periférico</text>
+</svg>`;
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    const preview = document.getElementById('preview');
+    
+    // Multiplicador de escala para alta resolución
+    const scale = 3;
+    canvas.width = 960 * scale;
+    canvas.height = 600 * scale;
+
+    const svgBlob = new Blob([svgCode], {type: 'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(svgBlob);
+
+    function descargar() {
+      const link = document.createElement('a');
+      link.download = 'esquema_electronica_CDIO.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    img.onload = function() {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      preview.src = canvas.toDataURL('image/png');
+      URL.revokeObjectURL(url);
+      
+      // Auto-descargar al cargar
+      setTimeout(descargar, 500);
+    };
+    img.src = url;
+
+    // Permitir descarga manual si el navegador bloquea la automática
+    preview.onclick = descargar;
+
+  </script>
+</body>
+</html>

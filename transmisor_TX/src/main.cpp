@@ -4,27 +4,29 @@
 
 const int LED_PIN = 2;
 
-// MAC del receptor_RX ya configurada
+// MAC del receptor_RX
 uint8_t broadcastAddress[] = {0x68, 0x09, 0x47, 0x9F, 0x19, 0x60};
 
-typedef struct struct_message {
-    int id_mensaje;
-} struct_message;
+typedef struct MensajeDatos {
+    int velocidad; 
+    int angulo;    
+} MensajeDatos;
 
-struct_message myData;
+MensajeDatos myData;
 esp_now_peer_info_t peerInfo;
 
-int contador = 1;
+const int PIN_JOYSTICK_VELOCIDAD = 34; // Y
+const int PIN_JOYSTICK_ANGULO = 35;    // X
+
+// --- ZONA MUERTA (MÁS AMPLIA PARA EVITAR SENSIBILIDAD EXTREMA) ---
+const int CENTRO_MIN = 1400; 
+const int CENTRO_MAX = 2000;
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
     if (status == ESP_NOW_SEND_SUCCESS) {
-        Serial.println("Entrega OK! 💡");
-        
         digitalWrite(LED_PIN, HIGH);
-        delay(250);
+        delay(5); 
         digitalWrite(LED_PIN, LOW);
-    } else {
-        Serial.println("Fallo al entregar (¿El carrito está apagado?)");
     }
 }
 
@@ -34,39 +36,45 @@ void setup() {
     
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
+    analogReadResolution(12); // Lee de 0 a 4095
 
     WiFi.mode(WIFI_STA);
-    
-    Serial.println("\n--- CONTROL REMOTO (EMISOR) ---");
-
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("Error inicializando ESP-NOW");
-        return;
-    }
-
+    if (esp_now_init() != ESP_OK) return;
     esp_now_register_send_cb(OnDataSent);
 
     memset(&peerInfo, 0, sizeof(peerInfo));
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
     peerInfo.channel = 0;
     peerInfo.encrypt = false;
-
-    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-        Serial.println("Fallo al emparejar");
-        return;
-    }
+    esp_now_add_peer(&peerInfo);
 }
 
 void loop() {
-    myData.id_mensaje = contador;
+    int crudo_vel = analogRead(PIN_JOYSTICK_VELOCIDAD);
+    int crudo_ang = analogRead(PIN_JOYSTICK_ANGULO);
     
-    Serial.print("Enviando mensaje #");
-    Serial.println(contador);
+    // 1. PROCESAR VELOCIDAD
+    if (crudo_vel > CENTRO_MAX) {
+        myData.velocidad = map(crudo_vel, CENTRO_MAX, 4095, 0, 255);
+    } else if (crudo_vel < CENTRO_MIN) {
+        myData.velocidad = map(crudo_vel, CENTRO_MIN, 0, 0, -255);
+    } else {
+        myData.velocidad = 0; // Zona Muerta
+    }
+
+    // 2. PROCESAR ÁNGULO
+    if (crudo_ang > CENTRO_MAX) {
+        myData.angulo = map(crudo_ang, CENTRO_MAX, 4095, 90, 130);
+    } else if (crudo_ang < CENTRO_MIN) {
+        myData.angulo = map(crudo_ang, CENTRO_MIN, 0, 90, 50);
+    } else {
+        myData.angulo = 90; // Zona Muerta
+    }
+    
+    Serial.printf("Lectura Cruda: Vel=%d Ang=%d >>> Enviando: Vel: %d | Ang: %d\n", 
+                  crudo_vel, crudo_ang, myData.velocidad, myData.angulo);
     
     esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
     
-    contador++;
-    
-    // Aumenté el tiempo de espera a 1.5s para que se vea claro que el led se apaga y se vuelve a prender.
-    delay(1500); 
+    delay(50); 
 }
