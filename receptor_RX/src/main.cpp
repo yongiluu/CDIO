@@ -19,11 +19,28 @@ typedef struct MensajeDatos {
 
 MensajeDatos datosEntrantes;
 
+// --- FAILSAFE ---
+// Si no llegan paquetes en este tiempo, se detiene el motor y se centra la dirección
+const unsigned long TIEMPO_FAILSAFE_MS = 300;
+volatile unsigned long ultimoPaqueteMs = 0;
+volatile bool enlaceActivo = false;
+
+void detenerMotor() {
+    digitalWrite(PIN_EN, LOW);
+    ledcWrite(0, 0);
+    ledcWrite(1, 0);
+}
+
 void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
+    // Ignora paquetes que no tengan el tamaño exacto de la estructura
+    if (len != sizeof(MensajeDatos)) return;
+
     digitalWrite(LED_PIN, HIGH);
     memcpy(&datosEntrantes, datos, sizeof(datosEntrantes));
+    ultimoPaqueteMs = millis();
+    enlaceActivo = true;
 
-    int velocidad_final = datosEntrantes.velocidad;
+    int velocidad_final = constrain(datosEntrantes.velocidad, -255, 255);
     int angulo_relativo = datosEntrantes.angulo; // Rango de -40° a +40°
 
     // 1. SERVO DE DIRECCIÓN
@@ -51,9 +68,7 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
         ledcWrite(1, abs(velocidad_final)); 
     } else {
         // Detenido absoluto (corta la energía del motor)
-        digitalWrite(PIN_EN, LOW);       
-        ledcWrite(0, 0);
-        ledcWrite(1, 0);
+        detenerMotor();
     }
 
     digitalWrite(LED_PIN, LOW);
@@ -103,5 +118,12 @@ void setup() {
 }
 
 void loop() {
+    // FAILSAFE: si se pierde la señal del control, el auto se detiene
+    if (enlaceActivo && millis() - ultimoPaqueteMs > TIEMPO_FAILSAFE_MS) {
+        enlaceActivo = false;
+        detenerMotor();
+        servoDireccion.write(90);
+        Serial.println("⚠️ Sin señal del control: motor detenido (failsafe)");
+    }
     delay(10);
 }
