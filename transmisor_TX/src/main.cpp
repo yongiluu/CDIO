@@ -7,7 +7,11 @@ const int LED_PIN = 2;
 // MAC del receptor_RX
 uint8_t broadcastAddress[] = {0x68, 0x09, 0x47, 0x9F, 0x19, 0x60};
 
+// Clave que identifica los paquetes de NUESTRO control (debe ser igual en el RX)
+const int CLAVE_CDIO = 0xCD10;
+
 typedef struct MensajeDatos {
+    int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
     int angulo;    // -40 a 40 (0 = ruedas rectas)
 } MensajeDatos;
@@ -25,13 +29,24 @@ const int ZONA_MUERTA = 300;
 int centroVel = 2048;
 int centroAng = 2048;
 
-int leerPromedio(int pin) {
+int leerPromedio(int pin, int muestras, int esperaMs) {
     long suma = 0;
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < muestras; i++) {
         suma += analogRead(pin);
-        delay(2);
+        if (esperaMs > 0) delay(esperaMs);
     }
-    return suma / 64;
+    return suma / muestras;
+}
+
+// Si el centro medido está muy lejos de la mitad, el joystick se estaba tocando
+// o está mal conectado: se usa 2048 para no "calibrar" un movimiento.
+int validarCentro(int centro, const char *nombre) {
+    if (centro < 1200 || centro > 2900) {
+        Serial.printf("⚠️ Centro de %s fuera de rango (%d). Revisar cableado. Se usa 2048.\n",
+                      nombre, centro);
+        return 2048;
+    }
+    return centro;
 }
 
 // Convierte la lectura cruda (0-4095) a un valor entre -limite y +limite,
@@ -62,8 +77,8 @@ void setup() {
     analogReadResolution(12); // Lee de 0 a 4095
 
     // Calibración del centro de los joysticks (deben estar sueltos al encender)
-    centroVel = leerPromedio(PIN_JOYSTICK_VELOCIDAD);
-    centroAng = leerPromedio(PIN_JOYSTICK_ANGULO);
+    centroVel = leerPromedio(PIN_JOYSTICK_VELOCIDAD, 64, 2);
+    centroAng = leerPromedio(PIN_JOYSTICK_ANGULO, 64, 2);
 
     WiFi.mode(WIFI_STA);
     
@@ -73,6 +88,9 @@ void setup() {
     Serial.println(WiFi.macAddress());
     Serial.printf(">> Centro joystick velocidad: %d | dirección: %d\n", centroVel, centroAng);
     Serial.println("==========================================\n");
+    centroVel = validarCentro(centroVel, "velocidad");
+    centroAng = validarCentro(centroAng, "dirección");
+    myData.clave = CLAVE_CDIO;
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("❌ Error inicializando ESP-NOW");
@@ -95,8 +113,9 @@ void setup() {
 }
 
 void loop() {
-    int crudo_vel = analogRead(PIN_JOYSTICK_VELOCIDAD);
-    int crudo_ang = analogRead(PIN_JOYSTICK_ANGULO);
+    // Promedio de varias lecturas: el ADC del ESP32 es ruidoso (sobre todo con WiFi)
+    int crudo_vel = leerPromedio(PIN_JOYSTICK_VELOCIDAD, 16, 0);
+    int crudo_ang = leerPromedio(PIN_JOYSTICK_ANGULO, 16, 0);
     
     // 1. PROCESAR VELOCIDAD (-255 a 255, 0 = Detenido)
     myData.velocidad = mapearEje(crudo_vel, centroVel, 255);

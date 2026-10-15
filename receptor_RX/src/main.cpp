@@ -1,29 +1,45 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_system.h>
 #include <ESP32Servo.h>
 
 const int LED_PIN = 2;
 
 const int PIN_SERVO_DIR = 13;
 const uint8_t PIN_EN = 27;    // R_EN y L_EN
-const uint8_t PIN_RPWM = 25;  
-const uint8_t PIN_LPWM = 26;  
+const uint8_t PIN_RPWM = 25;
+const uint8_t PIN_LPWM = 26;
 
 Servo servoDireccion;
 
+// Clave que identifica los paquetes de NUESTRO control (debe ser igual en el TX).
+// Evita que otro ESP32 cercano que use ESP-NOW mueva el auto.
+const int CLAVE_CDIO = 0xCD10;
+
 typedef struct MensajeDatos {
+    int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
     int angulo;    // -40 a 40 (0 = recto)
 } MensajeDatos;
 
-MensajeDatos datosEntrantes;
+// Datos compartidos entre el callback de ESP-NOW (tarea WiFi) y el loop
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+MensajeDatos ultimoMensaje = {CLAVE_CDIO, 0, 0};
+bool hayPaqueteNuevo = false;
+unsigned long ultimoPaqueteMs = 0;
 
 // --- FAILSAFE ---
 // Si no llegan paquetes en este tiempo, se detiene el motor y se centra la dirección
 const unsigned long TIEMPO_FAILSAFE_MS = 300;
-volatile unsigned long ultimoPaqueteMs = 0;
-volatile bool enlaceActivo = false;
+bool enlaceActivo = false;
+
+// --- RAMPA DE VELOCIDAD ---
+// Limita el cambio de PWM por ciclo para evitar picos de corriente que
+// bajan el voltaje y reinician el ESP32 (brownout). Frenar es inmediato.
+const int PASO_RAMPA = 15;  // cada 10 ms -> 0 a 255 en ~170 ms
+int velocidadObjetivo = 0;
+int velocidadActual = 0;
 
 void detenerMotor() {
     digitalWrite(PIN_EN, LOW);
@@ -31,62 +47,49 @@ void detenerMotor() {
     ledcWrite(1, 0);
 }
 
-void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
-    // Ignora paquetes que no tengan el tamaño exacto de la estructura
-    if (len != sizeof(MensajeDatos)) return;
-
-    digitalWrite(LED_PIN, HIGH);
-    memcpy(&datosEntrantes, datos, sizeof(datosEntrantes));
-    ultimoPaqueteMs = millis();
-    enlaceActivo = true;
-
-    int velocidad_final = constrain(datosEntrantes.velocidad, -255, 255);
-    int angulo_relativo = datosEntrantes.angulo; // Rango de -40° a +40°
-
-    // 1. SERVO DE DIRECCIÓN
-    // El servo físico entiende de 0° a 180° (donde 90° es el centro).
-    // Con 90 + angulo_relativo:
-    // -40° -> 50° (Giro a un lado)
-    //   0° -> 90° (Ruedas perfectamente rectas)
-    // +40° -> 130° (Giro al otro lado)
-    int angulo_servo = constrain(90 + angulo_relativo, 50, 130);
-    servoDireccion.write(angulo_servo);
-
-    Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo: %3d°)\n", 
-                  velocidad_final, angulo_relativo, angulo_servo);
-
-    // 2. MOTOR DE TRACCIÓN (Control por hardware a prueba de fallos)
-    if (velocidad_final > 0) {
-        // Avanzar
-        digitalWrite(PIN_EN, HIGH);      // Habilita el puente H SOLO cuando nos movemos
-        ledcWrite(1, 0);                 
-        ledcWrite(0, velocidad_final);   
-    } else if (velocidad_final < 0) {
+void aplicarMotor(int velocidad) {
+    if (velocidad > 0) {
+        // Avanzar: primero se fijan los PWM y después se habilita el puente H
+        ledcWrite(1, 0);
+        ledcWrite(0, velocidad);
+        digitalWrite(PIN_EN, HIGH);
+    } else if (velocidad < 0) {
         // Retroceder
-        digitalWrite(PIN_EN, HIGH);      // Habilita el puente H SOLO cuando nos movemos
-        ledcWrite(0, 0);                 
-        ledcWrite(1, abs(velocidad_final)); 
+        ledcWrite(0, 0);
+        ledcWrite(1, -velocidad);
+        digitalWrite(PIN_EN, HIGH);
     } else {
         // Detenido absoluto (corta la energía del motor)
         detenerMotor();
     }
+}
 
-    digitalWrite(LED_PIN, LOW);
+void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
+    // Ignora paquetes que no tengan el tamaño exacto de la estructura
+    if (len != sizeof(MensajeDatos)) return;
+
+    MensajeDatos m;
+    memcpy(&m, datos, sizeof(m));
+    // Ignora paquetes de otros dispositivos ESP-NOW
+    if (m.clave != CLAVE_CDIO) return;
+
+    // Solo se guardan los datos; los actuadores se controlan desde el loop
+    portENTER_CRITICAL(&mux);
+    ultimoMensaje = m;
+    hayPaqueteNuevo = true;
+    ultimoPaqueteMs = millis();
+    portEXIT_CRITICAL(&mux);
 }
 
 void setup() {
-    Serial.begin(115200);
-    delay(1000);
-
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LOW);
-
-    // --- CONFIGURACIÓN SEGURA DEL MOTOR ---
+    // --- CONFIGURACIÓN SEGURA DEL MOTOR (lo PRIMERO al arrancar) ---
+    // Hasta este punto los pines están flotando; mientras más rápido se fijen
+    // en LOW, menos tiempo puede el BTS7960 activarse solo.
     pinMode(PIN_EN, OUTPUT);
-    digitalWrite(PIN_EN, LOW); // Iniciar con el motor apagado
+    digitalWrite(PIN_EN, LOW);
 
-    ledcSetup(0, 5000, 8); 
-    ledcSetup(1, 5000, 8); 
+    ledcSetup(0, 5000, 8);
+    ledcSetup(1, 5000, 8);
     ledcAttachPin(PIN_RPWM, 0);
     ledcAttachPin(PIN_LPWM, 1);
 
@@ -94,18 +97,26 @@ void setup() {
     ledcWrite(1, 0);
     // --------------------------------------
 
-    // Inicializar Servo
+    Serial.begin(115200);
+    delay(1000);
+
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+
+    // Inicializar Servo (timer 2 -> no choca con los canales PWM 0 y 1 del motor)
     servoDireccion.setPeriodHertz(50);
-    ESP32PWM::allocateTimer(2); 
+    ESP32PWM::allocateTimer(2);
     servoDireccion.attach(PIN_SERVO_DIR, 500, 2500);
     servoDireccion.write(90); // 90° físicos = 0° de dirección (recto)
 
     WiFi.mode(WIFI_STA);
-    
+
     Serial.println("\n==========================================");
     Serial.println("       RECEPTOR (AUTO - RX) ACTIVO        ");
     Serial.print  (">> MI MAC ADDRESS ES: ");
     Serial.println(WiFi.macAddress());
+    Serial.printf (">> Causa del último reinicio: %d (9 = brownout / caída de voltaje)\n",
+                   (int)esp_reset_reason());
     Serial.println(">> Esperando paquetes de control...");
     Serial.println("==========================================\n");
 
@@ -113,17 +124,57 @@ void setup() {
         Serial.println("❌ Error inicializando ESP-NOW");
         return;
     }
-    
+
     esp_now_register_recv_cb(OnDataRecv);
 }
 
 void loop() {
+    MensajeDatos m;
+    bool nuevo;
+    unsigned long tPaquete;
+
+    portENTER_CRITICAL(&mux);
+    m = ultimoMensaje;
+    nuevo = hayPaqueteNuevo;
+    hayPaqueteNuevo = false;
+    tPaquete = ultimoPaqueteMs;
+    portEXIT_CRITICAL(&mux);
+
+    if (nuevo) {
+        enlaceActivo = true;
+        digitalWrite(LED_PIN, HIGH);
+
+        velocidadObjetivo = constrain(m.velocidad, -255, 255);
+
+        // SERVO DE DIRECCIÓN
+        // El servo físico entiende de 0° a 180° (donde 90° es el centro).
+        // -40° -> 50° | 0° -> 90° (recto) | +40° -> 130°
+        int angulo_servo = constrain(90 + m.angulo, 50, 130);
+        servoDireccion.write(angulo_servo);
+
+        Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo: %3d°)\n",
+                      velocidadObjetivo, m.angulo, angulo_servo);
+
+        digitalWrite(LED_PIN, LOW);
+    }
+
     // FAILSAFE: si se pierde la señal del control, el auto se detiene
-    if (enlaceActivo && millis() - ultimoPaqueteMs > TIEMPO_FAILSAFE_MS) {
+    if (enlaceActivo && millis() - tPaquete > TIEMPO_FAILSAFE_MS) {
         enlaceActivo = false;
-        detenerMotor();
+        velocidadObjetivo = 0;
         servoDireccion.write(90);
         Serial.println("⚠️ Sin señal del control: motor detenido (failsafe)");
     }
+
+    // MOTOR DE TRACCIÓN con rampa (detenerse es inmediato)
+    if (velocidadObjetivo == 0) {
+        velocidadActual = 0;
+    } else if (velocidadActual < velocidadObjetivo) {
+        velocidadActual = min(velocidadActual + PASO_RAMPA, velocidadObjetivo);
+    } else if (velocidadActual > velocidadObjetivo) {
+        velocidadActual = max(velocidadActual - PASO_RAMPA, velocidadObjetivo);
+    }
+    aplicarMotor(velocidadActual);
+
     delay(10);
 }

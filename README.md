@@ -78,8 +78,9 @@ Ambas placas intercambian la estructura binaria exacta:
 
 ```cpp
 typedef struct MensajeDatos {
+    int clave;     // 0xCD10: el RX descarta paquetes de otros dispositivos ESP-NOW
     int velocidad; // Rango: -255 a 255 (0 = detenido, >0 = adelante, <0 = reversa)
-    int angulo;    // Rango: 50° a 130° (90° = centrado)
+    int angulo;    // Rango: -40° a +40° (0 = recto; el RX lo convierte a 50°-130° del servo)
 } MensajeDatos;
 ```
 
