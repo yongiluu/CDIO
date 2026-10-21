@@ -16,6 +16,16 @@ typedef struct MensajeDatos {
     int angulo;    // -40 a 40 (0 = ruedas rectas)
 } MensajeDatos;
 
+// Telemetría que llega desde el auto (RX)
+const int CLAVE_TELEMETRIA = 0xCD11;
+
+typedef struct TelemetriaDatos {
+    int clave;       // CLAVE_TELEMETRIA
+    int bateria_mV;  // voltaje de la batería en milivoltios
+} TelemetriaDatos;
+
+volatile int bateriaAuto_mV = -1;  // -1 = aún no llega telemetría
+
 MensajeDatos myData;
 esp_now_peer_info_t peerInfo;
 
@@ -79,6 +89,14 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
     }
 }
 
+void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
+    if (len != sizeof(TelemetriaDatos)) return;
+    TelemetriaDatos t;
+    memcpy(&t, datos, sizeof(t));
+    if (t.clave != CLAVE_TELEMETRIA) return;
+    bateriaAuto_mV = t.bateria_mV;
+}
+
 void setup() {
     Serial.begin(115200);
     delay(1000);
@@ -109,6 +127,7 @@ void setup() {
     }
     
     esp_now_register_send_cb(OnDataSent);
+    esp_now_register_recv_cb(OnDataRecv);
 
     memset(&peerInfo, 0, sizeof(peerInfo));
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
@@ -135,8 +154,14 @@ void loop() {
     myData.angulo = mapearEje(crudo_ang, centroAng, 40, EXPO_DIRECCION);
     
     // Mostramos lecturas crudas, velocidad y ángulo relativo (-40° a +40°)
-    Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d°\n",
-                  crudo_vel, crudo_ang, myData.velocidad, myData.angulo);
+    int bat_mV = bateriaAuto_mV;
+    if (bat_mV >= 0) {
+        Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d° | Batería auto: %.2f V\n",
+                      crudo_vel, crudo_ang, myData.velocidad, myData.angulo, bat_mV / 1000.0f);
+    } else {
+        Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d° | Batería auto: --\n",
+                      crudo_vel, crudo_ang, myData.velocidad, myData.angulo);
+    }
     
     esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
     

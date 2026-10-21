@@ -11,6 +11,14 @@ const uint8_t PIN_EN = 27;    // R_EN y L_EN
 const uint8_t PIN_RPWM = 25;
 const uint8_t PIN_LPWM = 26;
 
+// --- BATERÍA ---
+// Divisor de voltaje: Batería+ -> 50 kΩ -> GPIO 34 -> 10 kΩ -> GND
+// Vpin = Vbat * 10k / (50k + 10k) = Vbat / 6  (3S llena 12,6 V -> 2,1 V en el pin)
+const int PIN_BATERIA = 34;  // ADC1: funciona con el WiFi activo
+const float FACTOR_DIVISOR = (50000.0f + 10000.0f) / 10000.0f;
+const float VOLTAJE_MIN_CELDA = 3.5f;  // aviso de batería baja por celda
+const unsigned long PERIODO_BATERIA_MS = 500;
+
 Servo servoDireccion;
 
 // Clave que identifica los paquetes de NUESTRO control (debe ser igual en el TX).
@@ -22,6 +30,18 @@ typedef struct MensajeDatos {
     int velocidad; // -255 a 255 (0 = detenido)
     int angulo;    // -40 a 40 (0 = recto)
 } MensajeDatos;
+
+// Telemetría que el RX envía de vuelta al control (TX)
+const int CLAVE_TELEMETRIA = 0xCD11;
+
+typedef struct TelemetriaDatos {
+    int clave;       // CLAVE_TELEMETRIA
+    int bateria_mV;  // voltaje de la batería en milivoltios
+} TelemetriaDatos;
+
+uint8_t macControl[6];
+bool macControlConocida = false;
+bool controlEmparejado = false;
 
 // Datos compartidos entre el callback de ESP-NOW (tarea WiFi) y el loop
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
@@ -86,7 +106,39 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
     ultimoMensaje = m;
     hayPaqueteNuevo = true;
     ultimoPaqueteMs = millis();
+    if (!macControlConocida) {
+        memcpy(macControl, mac, 6);  // se usa para enviar la telemetría de vuelta
+        macControlConocida = true;
+    }
     portEXIT_CRITICAL(&mux);
+}
+
+float leerBateria() {
+    // analogReadMilliVolts usa la calibración de fábrica del ADC
+    long suma = 0;
+    for (int i = 0; i < 16; i++) suma += analogReadMilliVolts(PIN_BATERIA);
+    return (suma / 16.0f) * FACTOR_DIVISOR / 1000.0f;
+}
+
+void enviarTelemetria(float voltaje) {
+    bool conocida;
+    portENTER_CRITICAL(&mux);
+    conocida = macControlConocida;
+    portEXIT_CRITICAL(&mux);
+    if (!conocida) return;
+
+    if (!controlEmparejado) {
+        esp_now_peer_info_t peer;
+        memset(&peer, 0, sizeof(peer));
+        memcpy(peer.peer_addr, macControl, 6);
+        peer.channel = 0;
+        peer.encrypt = false;
+        if (esp_now_add_peer(&peer) != ESP_OK) return;
+        controlEmparejado = true;
+    }
+
+    TelemetriaDatos t = {CLAVE_TELEMETRIA, (int)(voltaje * 1000)};
+    esp_now_send(macControl, (uint8_t *)&t, sizeof(t));
 }
 
 void setup() {
@@ -110,6 +162,8 @@ void setup() {
 
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
+
+    analogSetPinAttenuation(PIN_BATERIA, ADC_11db);  // rango hasta ~3,1 V
 
     // Inicializar Servo (timer 2 -> no choca con los canales PWM 0 y 1 del motor)
     servoDireccion.setPeriodHertz(50);
@@ -184,6 +238,17 @@ void loop() {
         velocidadActual = max(velocidadActual - PASO_RAMPA, velocidadObjetivo);
     }
     aplicarMotor(velocidadActual);
+
+    // BATERÍA: medir, mostrar y enviar al control cada PERIODO_BATERIA_MS
+    static unsigned long ultimaBateriaMs = 0;
+    if (millis() - ultimaBateriaMs >= PERIODO_BATERIA_MS) {
+        ultimaBateriaMs = millis();
+        float voltaje = leerBateria();
+        int celdas = voltaje > 8.8f ? 3 : 2;  // 2S llena = 8,4 V | 3S descargada = 9,9 V
+        Serial.printf("Batería: %.2f V (%dS, %.2f V/celda)%s\n", voltaje, celdas, voltaje / celdas,
+                      voltaje / celdas < VOLTAJE_MIN_CELDA ? "  ⚠️ BATERÍA BAJA" : "");
+        enviarTelemetria(voltaje);
+    }
 
     delay(10);
 }
