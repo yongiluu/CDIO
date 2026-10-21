@@ -16,7 +16,6 @@ const uint8_t PIN_LPWM = 26;
 // Vpin = Vbat * 10k / (50k + 10k) = Vbat / 6  (3S llena 12,6 V -> 2,1 V en el pin)
 const int PIN_BATERIA = 34;  // ADC1: funciona con el WiFi activo
 const float FACTOR_DIVISOR = (50000.0f + 10000.0f) / 10000.0f;
-const float VOLTAJE_MIN_CELDA = 3.5f;  // aviso de batería baja por celda
 const unsigned long PERIODO_BATERIA_MS = 500;
 
 Servo servoDireccion;
@@ -59,8 +58,15 @@ bool enlaceActivo = false;
 // GIRO_MAX_SERVO: grados que gira el servo a cada lado del centro. Subirlo da
 // más giro; si el servo zumba o se traba en los extremos, bajarlo.
 // CENTRO_SERVO: ajuste fino para que las ruedas queden rectas.
-const int GIRO_MAX_SERVO = 60;
+// IMPORTANTE: el servo no debe llegar al tope mecánico de la dirección. Si choca,
+// se traba, consume mucha corriente (> 2 A) y deja de responder.
+const int GIRO_MAX_SERVO = 45;
 const int CENTRO_SERVO = 90;
+// Velocidad máxima del servo: grados por ciclo de 10 ms (5 -> 45° en ~90 ms).
+// Evita los saltos bruscos que generan picos de corriente.
+const int PASO_SERVO = 5;
+int servoObjetivo = CENTRO_SERVO;
+int servoActual = CENTRO_SERVO;
 
 // --- RAMPA DE VELOCIDAD ---
 // Limita el cambio de PWM por ciclo para evitar picos de corriente que
@@ -211,12 +217,11 @@ void loop() {
         // SERVO DE DIRECCIÓN
         // -40 -> CENTRO - GIRO_MAX | 0 -> CENTRO (recto) | +40 -> CENTRO + GIRO_MAX
         int angulo_dir = constrain(m.angulo, -40, 40);
-        int angulo_servo = constrain(CENTRO_SERVO + map(angulo_dir, -40, 40, -GIRO_MAX_SERVO, GIRO_MAX_SERVO),
-                                     0, 180);
-        servoDireccion.write(angulo_servo);
+        servoObjetivo = constrain(CENTRO_SERVO + map(angulo_dir, -40, 40, -GIRO_MAX_SERVO, GIRO_MAX_SERVO),
+                                  0, 180);
 
-        Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo: %3d°)\n",
-                      velocidadObjetivo, m.angulo, angulo_servo);
+        Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo objetivo: %3d° | actual: %3d°)\n",
+                      velocidadObjetivo, m.angulo, servoObjetivo, servoActual);
 
         digitalWrite(LED_PIN, LOW);
     }
@@ -225,7 +230,7 @@ void loop() {
     if (enlaceActivo && millis() - tPaquete > TIEMPO_FAILSAFE_MS) {
         enlaceActivo = false;
         velocidadObjetivo = 0;
-        servoDireccion.write(CENTRO_SERVO);
+        servoObjetivo = CENTRO_SERVO;
         Serial.println("⚠️ Sin señal del control: motor detenido (failsafe)");
     }
 
@@ -239,15 +244,23 @@ void loop() {
     }
     aplicarMotor(velocidadActual);
 
-    // BATERÍA: medir, mostrar y enviar al control cada PERIODO_BATERIA_MS
+    // SERVO con rampa: se acerca al objetivo de a PASO_SERVO grados y solo
+    // se actualiza cuando el ángulo cambia
+    if (servoActual != servoObjetivo) {
+        if (servoActual < servoObjetivo) {
+            servoActual = min(servoActual + PASO_SERVO, servoObjetivo);
+        } else {
+            servoActual = max(servoActual - PASO_SERVO, servoObjetivo);
+        }
+        servoDireccion.write(servoActual);
+    }
+
+    // BATERÍA: medir y enviar al control cada PERIODO_BATERIA_MS
+    // (el voltaje y el aviso de batería baja se muestran en el monitor del TX)
     static unsigned long ultimaBateriaMs = 0;
     if (millis() - ultimaBateriaMs >= PERIODO_BATERIA_MS) {
         ultimaBateriaMs = millis();
-        float voltaje = leerBateria();
-        int celdas = voltaje > 8.8f ? 3 : 2;  // 2S llena = 8,4 V | 3S descargada = 9,9 V
-        Serial.printf("Batería: %.2f V (%dS, %.2f V/celda)%s\n", voltaje, celdas, voltaje / celdas,
-                      voltaje / celdas < VOLTAJE_MIN_CELDA ? "  ⚠️ BATERÍA BAJA" : "");
-        enviarTelemetria(voltaje);
+        enviarTelemetria(leerBateria());
     }
 
     delay(10);

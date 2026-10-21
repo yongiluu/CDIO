@@ -25,6 +25,7 @@ typedef struct TelemetriaDatos {
 } TelemetriaDatos;
 
 volatile int bateriaAuto_mV = -1;  // -1 = aún no llega telemetría
+const float VOLTAJE_MIN_CELDA = 3.5f;  // aviso de batería baja por celda
 
 MensajeDatos myData;
 esp_now_peer_info_t peerInfo;
@@ -170,8 +171,12 @@ void loop() {
     // Mostramos lecturas crudas, velocidad y ángulo relativo (-40° a +40°)
     int bat_mV = bateriaAuto_mV;
     if (bat_mV >= 0) {
-        Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d° | Batería auto: %.2f V\n",
-                      crudo_vel, crudo_ang, myData.velocidad, myData.angulo, bat_mV / 1000.0f);
+        float voltaje = bat_mV / 1000.0f;
+        int celdas = voltaje > 8.8f ? 3 : 2;  // 2S llena = 8,4 V | 3S descargada = 9,9 V
+        Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d° | Batería auto: %.2f V (%dS, %.2f V/celda)%s\n",
+                      crudo_vel, crudo_ang, myData.velocidad, myData.angulo,
+                      voltaje, celdas, voltaje / celdas,
+                      voltaje / celdas < VOLTAJE_MIN_CELDA ? "  ⚠️ BATERÍA BAJA" : "");
     } else {
         Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d° | Batería auto: --\n",
                       crudo_vel, crudo_ang, myData.velocidad, myData.angulo);
