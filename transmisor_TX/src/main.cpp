@@ -49,15 +49,26 @@ int validarCentro(int centro, const char *nombre) {
     return centro;
 }
 
+// --- SENSIBILIDAD (EXPO) ---
+// Curva tipo control RC: cerca del centro la respuesta es suave y al final del
+// recorrido llega igual al máximo. 0.0 = lineal, 1.0 = muy suave al centro.
+const float EXPO_VELOCIDAD = 0.6;
+const float EXPO_DIRECCION = 0.5;
+
 // Convierte la lectura cruda (0-4095) a un valor entre -limite y +limite,
 // con 0 dentro de la zona muerta alrededor del centro medido
-int mapearEje(int crudo, int centro, int limite) {
+int mapearEje(int crudo, int centro, int limite, float expo) {
+    float n; // posición normalizada fuera de la zona muerta: -1.0 a 1.0
     if (crudo > centro + ZONA_MUERTA) {
-        return constrain(map(crudo, centro + ZONA_MUERTA, 4095, 0, limite), 0, limite);
+        n = (float)(crudo - centro - ZONA_MUERTA) / (4095 - centro - ZONA_MUERTA);
     } else if (crudo < centro - ZONA_MUERTA) {
-        return constrain(map(crudo, centro - ZONA_MUERTA, 0, 0, -limite), -limite, 0);
+        n = -(float)(centro - ZONA_MUERTA - crudo) / (centro - ZONA_MUERTA);
+    } else {
+        return 0; // Zona Muerta
     }
-    return 0; // Zona Muerta
+    n = constrain(n, -1.0f, 1.0f);
+    float curva = expo * n * n * n + (1.0f - expo) * n;
+    return (int)lroundf(curva * limite);
 }
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -118,10 +129,10 @@ void loop() {
     int crudo_ang = leerPromedio(PIN_JOYSTICK_ANGULO, 16, 0);
     
     // 1. PROCESAR VELOCIDAD (-255 a 255, 0 = Detenido)
-    myData.velocidad = mapearEje(crudo_vel, centroVel, 255);
+    myData.velocidad = mapearEje(crudo_vel, centroVel, 255, EXPO_VELOCIDAD);
 
     // 2. PROCESAR ÁNGULO DE DIRECCIÓN (-40° a 40°, 0° = Recto)
-    myData.angulo = mapearEje(crudo_ang, centroAng, 40);
+    myData.angulo = mapearEje(crudo_ang, centroAng, 40, EXPO_DIRECCION);
     
     // Mostramos lecturas crudas, velocidad y ángulo relativo (-40° a +40°)
     Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d°\n",

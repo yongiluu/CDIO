@@ -34,6 +34,14 @@ unsigned long ultimoPaqueteMs = 0;
 const unsigned long TIEMPO_FAILSAFE_MS = 300;
 bool enlaceActivo = false;
 
+// --- DIRECCIÓN ---
+// El TX envía -40 a +40; aquí se escala al recorrido real del servo.
+// GIRO_MAX_SERVO: grados que gira el servo a cada lado del centro. Subirlo da
+// más giro; si el servo zumba o se traba en los extremos, bajarlo.
+// CENTRO_SERVO: ajuste fino para que las ruedas queden rectas.
+const int GIRO_MAX_SERVO = 60;
+const int CENTRO_SERVO = 90;
+
 // --- RAMPA DE VELOCIDAD ---
 // Limita el cambio de PWM por ciclo para evitar picos de corriente que
 // bajan el voltaje y reinician el ESP32 (brownout). Frenar es inmediato.
@@ -107,7 +115,7 @@ void setup() {
     servoDireccion.setPeriodHertz(50);
     ESP32PWM::allocateTimer(2);
     servoDireccion.attach(PIN_SERVO_DIR, 500, 2500);
-    servoDireccion.write(90); // 90° físicos = 0° de dirección (recto)
+    servoDireccion.write(CENTRO_SERVO); // ruedas rectas
 
     WiFi.mode(WIFI_STA);
 
@@ -147,9 +155,10 @@ void loop() {
         velocidadObjetivo = constrain(m.velocidad, -255, 255);
 
         // SERVO DE DIRECCIÓN
-        // El servo físico entiende de 0° a 180° (donde 90° es el centro).
-        // -40° -> 50° | 0° -> 90° (recto) | +40° -> 130°
-        int angulo_servo = constrain(90 + m.angulo, 50, 130);
+        // -40 -> CENTRO - GIRO_MAX | 0 -> CENTRO (recto) | +40 -> CENTRO + GIRO_MAX
+        int angulo_dir = constrain(m.angulo, -40, 40);
+        int angulo_servo = constrain(CENTRO_SERVO + map(angulo_dir, -40, 40, -GIRO_MAX_SERVO, GIRO_MAX_SERVO),
+                                     0, 180);
         servoDireccion.write(angulo_servo);
 
         Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo: %3d°)\n",
@@ -162,7 +171,7 @@ void loop() {
     if (enlaceActivo && millis() - tPaquete > TIEMPO_FAILSAFE_MS) {
         enlaceActivo = false;
         velocidadObjetivo = 0;
-        servoDireccion.write(90);
+        servoDireccion.write(CENTRO_SERVO);
         Serial.println("⚠️ Sin señal del control: motor detenido (failsafe)");
     }
 
