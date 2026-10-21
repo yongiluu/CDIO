@@ -49,14 +49,17 @@ int leerPromedio(int pin, int muestras, int esperaMs) {
 }
 
 // Si el centro medido está muy lejos de la mitad, el joystick se estaba tocando
-// o está mal conectado: se usa 2048 para no "calibrar" un movimiento.
-int validarCentro(int centro, const char *nombre) {
+// o está mal conectado. En ese caso el control queda BLOQUEADO (envía siempre
+// velocidad 0 y dirección recta) hasta reiniciarlo con los joysticks bien.
+bool joysticksOk = true;
+
+bool validarCentro(int centro, const char *nombre) {
     if (centro < 1200 || centro > 2900) {
-        Serial.printf("⚠️ Centro de %s fuera de rango (%d). Revisar cableado. Se usa 2048.\n",
+        Serial.printf("❌ Centro de %s fuera de rango (%d). Revisar cableado del joystick.\n",
                       nombre, centro);
-        return 2048;
+        return false;
     }
-    return centro;
+    return true;
 }
 
 // --- SENSIBILIDAD (EXPO) ---
@@ -117,8 +120,12 @@ void setup() {
     Serial.println(WiFi.macAddress());
     Serial.printf(">> Centro joystick velocidad: %d | dirección: %d\n", centroVel, centroAng);
     Serial.println("==========================================\n");
-    centroVel = validarCentro(centroVel, "velocidad");
-    centroAng = validarCentro(centroAng, "dirección");
+    bool velOk = validarCentro(centroVel, "velocidad");
+    bool angOk = validarCentro(centroAng, "dirección");
+    joysticksOk = velOk && angOk;
+    if (!joysticksOk) {
+        Serial.println("❌ CONTROL BLOQUEADO: se envía Vel 0 / Ang 0. Revisar joysticks y reiniciar.");
+    }
     myData.clave = CLAVE_CDIO;
 
     if (esp_now_init() != ESP_OK) {
@@ -152,6 +159,13 @@ void loop() {
 
     // 2. PROCESAR ÁNGULO DE DIRECCIÓN (-40° a 40°, 0° = Recto)
     myData.angulo = mapearEje(crudo_ang, centroAng, 40, EXPO_DIRECCION);
+
+    // Con la calibración fallida nunca se envía movimiento
+    if (!joysticksOk) {
+        myData.velocidad = 0;
+        myData.angulo = 0;
+        Serial.print("[BLOQUEADO] ");
+    }
     
     // Mostramos lecturas crudas, velocidad y ángulo relativo (-40° a +40°)
     int bat_mV = bateriaAuto_mV;
