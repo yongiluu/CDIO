@@ -28,6 +28,7 @@ typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
     int angulo;    // -40 a 40 (0 = recto)
+    int freno;     // 1 = fast brake (click del stick de potencia en el TX)
 } MensajeDatos;
 
 // Telemetría que el RX envía de vuelta al control (TX)
@@ -44,7 +45,7 @@ bool controlEmparejado = false;
 
 // Datos compartidos entre el callback de ESP-NOW (tarea WiFi) y el loop
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-MensajeDatos ultimoMensaje = {CLAVE_CDIO, 0, 0};
+MensajeDatos ultimoMensaje = {CLAVE_CDIO, 0, 0, 0};
 bool hayPaqueteNuevo = false;
 unsigned long ultimoPaqueteMs = 0;
 
@@ -74,6 +75,19 @@ int servoActual = CENTRO_SERVO;
 const int PASO_RAMPA = 15;  // cada 10 ms -> 0 a 255 en ~170 ms
 int velocidadObjetivo = 0;
 int velocidadActual = 0;
+
+// --- FAST BRAKE ---
+// Con el puente H habilitado y RPWM = LPWM = LOW, los dos transistores
+// inferiores del BTS7960 conducen y ponen en cortocircuito los bornes del
+// motor: la fuerza contraelectromotriz genera una corriente que lo frena
+// mucho más rápido que dejarlo en rueda libre.
+bool frenoActivo = false;
+
+void frenarMotor() {
+    ledcWrite(0, 0);
+    ledcWrite(1, 0);
+    digitalWrite(PIN_EN, HIGH);
+}
 
 void detenerMotor() {
     digitalWrite(PIN_EN, LOW);
@@ -213,6 +227,7 @@ void loop() {
         digitalWrite(LED_PIN, HIGH);
 
         velocidadObjetivo = constrain(m.velocidad, -255, 255);
+        frenoActivo = (m.freno == 1);
 
         // SERVO DE DIRECCIÓN
         // -40 -> CENTRO - GIRO_MAX | 0 -> CENTRO (recto) | +40 -> CENTRO + GIRO_MAX
@@ -220,8 +235,9 @@ void loop() {
         servoObjetivo = constrain(CENTRO_SERVO + map(angulo_dir, -40, 40, -GIRO_MAX_SERVO, GIRO_MAX_SERVO),
                                   0, 180);
 
-        Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo objetivo: %3d° | actual: %3d°)\n",
-                      velocidadObjetivo, m.angulo, servoObjetivo, servoActual);
+        Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo objetivo: %3d° | actual: %3d°)%s\n",
+                      velocidadObjetivo, m.angulo, servoObjetivo, servoActual,
+                      frenoActivo ? " | FRENO" : "");
 
         digitalWrite(LED_PIN, LOW);
     }
@@ -230,19 +246,26 @@ void loop() {
     if (enlaceActivo && millis() - tPaquete > TIEMPO_FAILSAFE_MS) {
         enlaceActivo = false;
         velocidadObjetivo = 0;
+        frenoActivo = false;
         servoObjetivo = CENTRO_SERVO;
         Serial.println("⚠️ Sin señal del control: motor detenido (failsafe)");
     }
 
     // MOTOR DE TRACCIÓN con rampa (detenerse es inmediato)
-    if (velocidadObjetivo == 0) {
+    // El freno tiene prioridad sobre el acelerador: mientras el botón esté
+    // presionado el motor queda frenado aunque el stick esté adelante o atrás.
+    // Al soltarlo, vuelve a acelerar desde 0 con la rampa normal.
+    if (frenoActivo) {
+        velocidadActual = 0;
+        frenarMotor();
+    } else if (velocidadObjetivo == 0) {
         velocidadActual = 0;
     } else if (velocidadActual < velocidadObjetivo) {
         velocidadActual = min(velocidadActual + PASO_RAMPA, velocidadObjetivo);
     } else if (velocidadActual > velocidadObjetivo) {
         velocidadActual = max(velocidadActual - PASO_RAMPA, velocidadObjetivo);
     }
-    aplicarMotor(velocidadActual);
+    if (!frenoActivo) aplicarMotor(velocidadActual);
 
     // SERVO con rampa: se acerca al objetivo de a PASO_SERVO grados y solo
     // se actualiza cuando el ángulo cambia

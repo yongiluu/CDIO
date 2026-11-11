@@ -14,6 +14,7 @@ typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
     int angulo;    // -40 a 40 (0 = ruedas rectas)
+    int freno;     // 1 = botón del stick de potencia presionado (fast brake)
 } MensajeDatos;
 
 // Telemetría que llega desde el auto (RX)
@@ -32,6 +33,12 @@ esp_now_peer_info_t peerInfo;
 
 const int PIN_JOYSTICK_VELOCIDAD = 34; // Y
 const int PIN_JOYSTICK_ANGULO = 35;    // X
+
+// --- BOTÓN DE FRENO (click del stick de potencia) ---
+// Pin SW del joystick de velocidad -> GPIO 32; el otro lado del botón a GND.
+// Se usa el pull-up interno: suelto = HIGH, presionado = LOW.
+// (GPIO 34/35 no sirven: son solo entrada y no tienen pull-up.)
+const int PIN_BOTON_FRENO = 32;
 
 // --- ZONA MUERTA (DEADZONE) ---
 // El centro real de cada joystick se mide al encender (no tocar los joysticks
@@ -108,6 +115,7 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
     analogReadResolution(12); // Lee de 0 a 4095
+    pinMode(PIN_BOTON_FRENO, INPUT_PULLUP);
 
     // Calibración del centro de los joysticks (deben estar sueltos al encender)
     centroVel = leerPromedio(PIN_JOYSTICK_VELOCIDAD, 64, 2);
@@ -161,14 +169,20 @@ void loop() {
     // 2. PROCESAR ÁNGULO DE DIRECCIÓN (-40° a 40°, 0° = Recto)
     myData.angulo = mapearEje(crudo_ang, centroAng, 40, EXPO_DIRECCION);
 
+    // 3. FRENO: mientras se mantenga presionado el stick de potencia, el auto
+    //    frena (el RX ignora la velocidad mientras freno = 1)
+    myData.freno = (digitalRead(PIN_BOTON_FRENO) == LOW) ? 1 : 0;
+
     // Con la calibración fallida nunca se envía movimiento
     if (!joysticksOk) {
         myData.velocidad = 0;
         myData.angulo = 0;
+        myData.freno = 0;
         Serial.print("[BLOQUEADO] ");
     }
     
     // Mostramos lecturas crudas, velocidad y ángulo relativo (-40° a +40°)
+    if (myData.freno) Serial.print("[FRENO] ");
     int bat_mV = bateriaAuto_mV;
     if (bat_mV >= 0) {
         float voltaje = bat_mV / 1000.0f;

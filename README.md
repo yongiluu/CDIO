@@ -67,6 +67,7 @@ El proyecto está modularizado en dos bloques principales:
 * **Mando Analógico:** 2 Joysticks analógicos de dos ejes.
   * Eje Y (Velocidad / Tracción) -> **GPIO 34**
   * Eje X (Dirección / Ángulo) -> **GPIO 35**
+  * Botón SW del joystick de velocidad (Fast brake, mantener presionado) -> **GPIO 32** (el otro pin del botón a GND; pull-up interno)
 * **Filtrado de Señal:**
   * Rango muerto calibrado entre `1400` y `2000` cuentas ADC para asegurar que el centro físico repose en `Velocidad = 0` y `Ángulo = 90°`.
 
