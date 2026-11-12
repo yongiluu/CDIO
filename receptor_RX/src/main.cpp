@@ -4,12 +4,26 @@
 #include <esp_system.h>
 #include <ESP32Servo.h>
 
+// Compatible con el core Arduino-ESP32 2.x y 3.x (PlatformIO espressif32 >= 7).
+// En el 3.x cambió la API de PWM (ledc) y el callback de recepción de ESP-NOW.
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+#define CORE_ESP32_V3 1
+#else
+#define CORE_ESP32_V3 0
+#endif
+
 const int LED_PIN = 2;
 
 const int PIN_SERVO_DIR = 13;
 const uint8_t PIN_EN = 27;    // R_EN y L_EN
 const uint8_t PIN_RPWM = 25;
 const uint8_t PIN_LPWM = 26;
+
+// Canales PWM del motor (timer 0). El servo usa el timer 2 (canal 4), así no chocan.
+const uint8_t CANAL_RPWM = 0;
+const uint8_t CANAL_LPWM = 1;
+const uint32_t FRECUENCIA_PWM = 5000;  // Hz
+const uint8_t RESOLUCION_PWM = 8;      // 0 a 255
 
 // --- BATERÍA ---
 // Divisor de voltaje: Batería+ -> 50 kΩ -> GPIO 34 -> 10 kΩ -> GND
@@ -28,6 +42,7 @@ typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
     int angulo;    // -40 a 40 (0 = recto)
+    int freno;     // 1 = fast brake (click en el stick de potencia), 0 = normal
 } MensajeDatos;
 
 // Telemetría que el RX envía de vuelta al control (TX)
@@ -44,7 +59,7 @@ bool controlEmparejado = false;
 
 // Datos compartidos entre el callback de ESP-NOW (tarea WiFi) y el loop
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-MensajeDatos ultimoMensaje = {CLAVE_CDIO, 0, 0};
+MensajeDatos ultimoMensaje = {CLAVE_CDIO, 0, 0, 0};
 bool hayPaqueteNuevo = false;
 unsigned long ultimoPaqueteMs = 0;
 
@@ -52,6 +67,10 @@ unsigned long ultimoPaqueteMs = 0;
 // Si no llegan paquetes en este tiempo, se detiene el motor y se centra la dirección
 const unsigned long TIEMPO_FAILSAFE_MS = 300;
 bool enlaceActivo = false;
+
+// --- FAST BRAKE ---
+// true mientras el control pide frenar (click en el stick de potencia)
+bool frenando = false;
 
 // --- DIRECCIÓN ---
 // El TX envía -40 a +40; aquí se escala al recorrido real del servo.
@@ -75,22 +94,60 @@ const int PASO_RAMPA = 15;  // cada 10 ms -> 0 a 255 en ~170 ms
 int velocidadObjetivo = 0;
 int velocidadActual = 0;
 
+// Escribe el PWM de un pin del motor (en el core 3.x ledcWrite recibe el pin,
+// en el 2.x recibe el canal)
+void pwmMotor(uint8_t pin, uint8_t canal, uint32_t duty) {
+#if CORE_ESP32_V3
+    (void)canal;
+    ledcWrite(pin, duty);
+#else
+    (void)pin;
+    ledcWrite(canal, duty);
+#endif
+}
+
+void configurarPwmMotor() {
+#if CORE_ESP32_V3
+    ledcAttachChannel(PIN_RPWM, FRECUENCIA_PWM, RESOLUCION_PWM, CANAL_RPWM);
+    ledcAttachChannel(PIN_LPWM, FRECUENCIA_PWM, RESOLUCION_PWM, CANAL_LPWM);
+#else
+    ledcSetup(CANAL_RPWM, FRECUENCIA_PWM, RESOLUCION_PWM);
+    ledcSetup(CANAL_LPWM, FRECUENCIA_PWM, RESOLUCION_PWM);
+    ledcAttachPin(PIN_RPWM, CANAL_RPWM);
+    ledcAttachPin(PIN_LPWM, CANAL_LPWM);
+#endif
+    pwmMotor(PIN_RPWM, CANAL_RPWM, 0);
+    pwmMotor(PIN_LPWM, CANAL_LPWM, 0);
+}
+
+// Rueda libre: puente H deshabilitado, el motor se detiene solo por roce
 void detenerMotor() {
     digitalWrite(PIN_EN, LOW);
-    ledcWrite(0, 0);
-    ledcWrite(1, 0);
+    pwmMotor(PIN_RPWM, CANAL_RPWM, 0);
+    pwmMotor(PIN_LPWM, CANAL_LPWM, 0);
+}
+
+// FAST BRAKE (freno dinámico): RPWM = LPWM = 0 con el puente H habilitado.
+// Los dos MOSFET inferiores del BTS7960 quedan conduciendo y ponen en corto
+// los bornes del motor (M+ y M- a B-). La fuerza contraelectromotriz genera
+// una corriente que se opone al giro y el motor se detiene mucho más rápido
+// que en rueda libre.
+void frenarMotor() {
+    pwmMotor(PIN_RPWM, CANAL_RPWM, 0);
+    pwmMotor(PIN_LPWM, CANAL_LPWM, 0);
+    digitalWrite(PIN_EN, HIGH);
 }
 
 void aplicarMotor(int velocidad) {
     if (velocidad > 0) {
         // Avanzar: primero se fijan los PWM y después se habilita el puente H
-        ledcWrite(1, 0);
-        ledcWrite(0, velocidad);
+        pwmMotor(PIN_LPWM, CANAL_LPWM, 0);
+        pwmMotor(PIN_RPWM, CANAL_RPWM, velocidad);
         digitalWrite(PIN_EN, HIGH);
     } else if (velocidad < 0) {
         // Retroceder
-        ledcWrite(0, 0);
-        ledcWrite(1, -velocidad);
+        pwmMotor(PIN_RPWM, CANAL_RPWM, 0);
+        pwmMotor(PIN_LPWM, CANAL_LPWM, -velocidad);
         digitalWrite(PIN_EN, HIGH);
     } else {
         // Detenido absoluto (corta la energía del motor)
@@ -98,7 +155,12 @@ void aplicarMotor(int velocidad) {
     }
 }
 
+#if CORE_ESP32_V3
+void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *datos, int len) {
+    const uint8_t *mac = info->src_addr;
+#else
 void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
+#endif
     // Ignora paquetes que no tengan el tamaño exacto de la estructura
     if (len != sizeof(MensajeDatos)) return;
 
@@ -154,13 +216,7 @@ void setup() {
     pinMode(PIN_EN, OUTPUT);
     digitalWrite(PIN_EN, LOW);
 
-    ledcSetup(0, 5000, 8);
-    ledcSetup(1, 5000, 8);
-    ledcAttachPin(PIN_RPWM, 0);
-    ledcAttachPin(PIN_LPWM, 1);
-
-    ledcWrite(0, 0);
-    ledcWrite(1, 0);
+    configurarPwmMotor();
     // --------------------------------------
 
     Serial.begin(115200);
@@ -214,14 +270,21 @@ void loop() {
 
         velocidadObjetivo = constrain(m.velocidad, -255, 255);
 
+        bool frenoPedido = (m.freno != 0);
+        if (frenoPedido && !frenando) Serial.println("🛑 FAST BRAKE activado");
+        if (!frenoPedido && frenando) Serial.println("✅ Fast brake liberado");
+        frenando = frenoPedido;
+        if (frenando) velocidadObjetivo = 0;
+
         // SERVO DE DIRECCIÓN
         // -40 -> CENTRO - GIRO_MAX | 0 -> CENTRO (recto) | +40 -> CENTRO + GIRO_MAX
         int angulo_dir = constrain(m.angulo, -40, 40);
         servoObjetivo = constrain(CENTRO_SERVO + map(angulo_dir, -40, 40, -GIRO_MAX_SERVO, GIRO_MAX_SERVO),
                                   0, 180);
 
-        Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo objetivo: %3d° | actual: %3d°)\n",
-                      velocidadObjetivo, m.angulo, servoObjetivo, servoActual);
+        Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo objetivo: %3d° | actual: %3d°)%s\n",
+                      velocidadObjetivo, m.angulo, servoObjetivo, servoActual,
+                      frenando ? " | FRENANDO" : "");
 
         digitalWrite(LED_PIN, LOW);
     }
@@ -230,19 +293,25 @@ void loop() {
     if (enlaceActivo && millis() - tPaquete > TIEMPO_FAILSAFE_MS) {
         enlaceActivo = false;
         velocidadObjetivo = 0;
+        frenando = false;
         servoObjetivo = CENTRO_SERVO;
         Serial.println("⚠️ Sin señal del control: motor detenido (failsafe)");
     }
 
-    // MOTOR DE TRACCIÓN con rampa (detenerse es inmediato)
-    if (velocidadObjetivo == 0) {
+    // MOTOR DE TRACCIÓN con rampa (detenerse y frenar es inmediato)
+    if (frenando) {
         velocidadActual = 0;
-    } else if (velocidadActual < velocidadObjetivo) {
-        velocidadActual = min(velocidadActual + PASO_RAMPA, velocidadObjetivo);
-    } else if (velocidadActual > velocidadObjetivo) {
-        velocidadActual = max(velocidadActual - PASO_RAMPA, velocidadObjetivo);
+        frenarMotor();
+    } else {
+        if (velocidadObjetivo == 0) {
+            velocidadActual = 0;
+        } else if (velocidadActual < velocidadObjetivo) {
+            velocidadActual = min(velocidadActual + PASO_RAMPA, velocidadObjetivo);
+        } else if (velocidadActual > velocidadObjetivo) {
+            velocidadActual = max(velocidadActual - PASO_RAMPA, velocidadObjetivo);
+        }
+        aplicarMotor(velocidadActual);
     }
-    aplicarMotor(velocidadActual);
 
     // SERVO con rampa: se acerca al objetivo de a PASO_SERVO grados y solo
     // se actualiza cuando el ángulo cambia
