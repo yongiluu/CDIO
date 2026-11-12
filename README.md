@@ -67,6 +67,7 @@ El proyecto está modularizado en dos bloques principales:
 * **Mando Analógico:** 2 Joysticks analógicos de dos ejes.
   * Eje Y (Velocidad / Tracción) -> **GPIO 34**
   * Eje X (Dirección / Ángulo) -> **GPIO 35**
+  * Botón del stick de potencia (pin `SW`, *fast brake*) -> **GPIO 32** (pull-up interno, el otro lado del botón a GND)
 * **Filtrado de Señal:**
   * Rango muerto calibrado entre `1400` y `2000` cuentas ADC para asegurar que el centro físico repose en `Velocidad = 0` y `Ángulo = 90°`.
 
@@ -81,14 +82,20 @@ typedef struct MensajeDatos {
     int clave;     // 0xCD10: el RX descarta paquetes de otros dispositivos ESP-NOW
     int velocidad; // Rango: -255 a 255 (0 = detenido, >0 = adelante, <0 = reversa)
     int angulo;    // Rango: -40° a +40° (0 = recto; el RX lo convierte a 50°-130° del servo)
+    int freno;     // 1 = fast brake (click en el stick de potencia)
 } MensajeDatos;
 ```
+
+> Si se cambia esta estructura hay que subir el código al TX **y** al RX: el RX descarta los paquetes de otro tamaño.
+
+### Fast brake
+Un click en el stick de potencia activa el freno dinámico: el RX habilita el BTS7960 con `RPWM = LPWM = 0`, lo que pone en corto los bornes del motor a través de los MOSFET inferiores y lo detiene mucho más rápido que en rueda libre. El freno se mantiene al menos 0,5 s y se libera cuando se suelta el botón y el stick vuelve al centro.
 
 ---
 
 ## ⚙️ Compilación e Instalación
 
-Este proyecto está configurado para **PlatformIO** (extensión recomendada para VS Code).
+Este proyecto está configurado para **PlatformIO** (extensión recomendada para VS Code). El código compila con el core Arduino-ESP32 2.x y 3.x (por ejemplo `espressif32` 8.0.0 / core 3.3.12): la API `ledc` y los callbacks de ESP-NOW se eligen con `#if` según la versión.
 
 ### Pasos de Carga:
 1. **Receptor:**

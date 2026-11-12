@@ -1,6 +1,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_idf_version.h>
+
+// Compatible con el core Arduino-ESP32 2.x y 3.x (PlatformIO espressif32 >= 7).
+// En ESP-IDF 5.0+ cambió el callback de recepción y en 5.5+ el de envío.
+#define ESPNOW_RECV_V5 (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
+#define ESPNOW_SEND_V55 (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0))
 
 const int LED_PIN = 2;
 
@@ -14,6 +20,7 @@ typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
     int angulo;    // -40 a 40 (0 = ruedas rectas)
+    int freno;     // 1 = fast brake (click en el stick de potencia), 0 = normal
 } MensajeDatos;
 
 // Telemetría que llega desde el auto (RX)
@@ -32,6 +39,18 @@ esp_now_peer_info_t peerInfo;
 
 const int PIN_JOYSTICK_VELOCIDAD = 34; // Y
 const int PIN_JOYSTICK_ANGULO = 35;    // X
+
+// --- FAST BRAKE ---
+// Botón del stick de potencia (pin SW del joystick de velocidad): SW -> GPIO 32,
+// el otro lado del botón a GND. Se usa la resistencia pull-up interna, así que
+// suelto lee HIGH y presionado lee LOW.
+// Un click activa el freno y queda activo hasta que pasen FRENO_MIN_MS, se suelte
+// el botón y el stick de potencia vuelva al centro. Así un click corto igual frena
+// a fondo y el auto no vuelve a acelerar solo al soltar el botón.
+const int PIN_BOTON_FRENO = 32;
+const unsigned long FRENO_MIN_MS = 500;
+bool frenoActivo = false;
+unsigned long inicioFrenoMs = 0;
 
 // --- ZONA MUERTA (DEADZONE) ---
 // El centro real de cada joystick se mide al encender (no tocar los joysticks
@@ -85,7 +104,11 @@ int mapearEje(int crudo, int centro, int limite, float expo) {
     return (int)lroundf(curva * limite);
 }
 
+#if ESPNOW_SEND_V55
+void OnDataSent(const esp_now_send_info_t *info, esp_now_send_status_t status) {
+#else
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+#endif
     if (status == ESP_NOW_SEND_SUCCESS) {
         digitalWrite(LED_PIN, HIGH);
         delay(5); 
@@ -93,7 +116,11 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
     }
 }
 
+#if ESPNOW_RECV_V5
+void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *datos, int len) {
+#else
 void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
+#endif
     if (len != sizeof(TelemetriaDatos)) return;
     TelemetriaDatos t;
     memcpy(&t, datos, sizeof(t));
@@ -108,6 +135,7 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
     analogReadResolution(12); // Lee de 0 a 4095
+    pinMode(PIN_BOTON_FRENO, INPUT_PULLUP);
 
     // Calibración del centro de los joysticks (deben estar sueltos al encender)
     centroVel = leerPromedio(PIN_JOYSTICK_VELOCIDAD, 64, 2);
@@ -128,6 +156,7 @@ void setup() {
         Serial.println("❌ CONTROL BLOQUEADO: se envía Vel 0 / Ang 0. Revisar joysticks y reiniciar.");
     }
     myData.clave = CLAVE_CDIO;
+    myData.freno = 0;
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("❌ Error inicializando ESP-NOW");
@@ -166,6 +195,22 @@ void loop() {
         myData.velocidad = 0;
         myData.angulo = 0;
         Serial.print("[BLOQUEADO] ");
+    }
+
+    // 3. FAST BRAKE con el click del stick de potencia
+    // (se lee cada 50 ms, lo que ya filtra el rebote del botón)
+    bool botonPresionado = (digitalRead(PIN_BOTON_FRENO) == LOW);
+    if (botonPresionado && !frenoActivo) {
+        frenoActivo = true;
+        inicioFrenoMs = millis();
+    } else if (frenoActivo && !botonPresionado && myData.velocidad == 0 &&
+               millis() - inicioFrenoMs >= FRENO_MIN_MS) {
+        frenoActivo = false;  // botón suelto y stick al centro: se libera el freno
+    }
+    myData.freno = frenoActivo ? 1 : 0;
+    if (frenoActivo) {
+        myData.velocidad = 0;  // mientras frena nunca se pide tracción
+        Serial.print("[FRENO] ");
     }
     
     // Mostramos lecturas crudas, velocidad y ángulo relativo (-40° a +40°)
