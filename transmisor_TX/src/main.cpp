@@ -1,6 +1,11 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#if __has_include(<esp_mac.h>)
+#include <esp_mac.h>   // esp_read_mac (ESP-IDF 5 / core 3.x)
+#else
+#include <esp_system.h>
+#endif
 #include <esp_idf_version.h>
 
 // Compatible con el core Arduino-ESP32 2.x y 3.x (PlatformIO espressif32 >= 7).
@@ -128,6 +133,14 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
     bateriaAuto_mV = t.bateria_mV;
 }
 
+// Imprime la MAC WiFi (STA) leída directo del eFuse. En el core 3.x
+// WiFi.macAddress() devuelve 00:00:00:00:00:00 si el WiFi aún no terminó de iniciar.
+void imprimirMac() {
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    Serial.printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
 void setup() {
     Serial.begin(115200);
     delay(1000);
@@ -146,7 +159,7 @@ void setup() {
     Serial.println("\n==========================================");
     Serial.println("       TRANSMISOR (CONTROL - TX)          ");
     Serial.print  (">> MAC Transmisor: ");
-    Serial.println(WiFi.macAddress());
+    imprimirMac();
     Serial.printf(">> Centro joystick velocidad: %d | dirección: %d\n", centroVel, centroAng);
     Serial.println("==========================================\n");
     bool velOk = validarCentro(centroVel, "velocidad");

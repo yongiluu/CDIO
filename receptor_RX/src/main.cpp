@@ -1,6 +1,11 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#if __has_include(<esp_mac.h>)
+#include <esp_mac.h>   // esp_read_mac (ESP-IDF 5 / core 3.x)
+#else
+#include <esp_system.h>
+#endif
 #include <esp_system.h>
 #include <ESP32Servo.h>
 
@@ -209,6 +214,14 @@ void enviarTelemetria(float voltaje) {
     esp_now_send(macControl, (uint8_t *)&t, sizeof(t));
 }
 
+// Imprime la MAC WiFi (STA) leída directo del eFuse. En el core 3.x
+// WiFi.macAddress() devuelve 00:00:00:00:00:00 si el WiFi aún no terminó de iniciar.
+void imprimirMac() {
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    Serial.printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
 void setup() {
     // --- CONFIGURACIÓN SEGURA DEL MOTOR (lo PRIMERO al arrancar) ---
     // Hasta este punto los pines están flotando; mientras más rápido se fijen
@@ -238,7 +251,7 @@ void setup() {
     Serial.println("\n==========================================");
     Serial.println("       RECEPTOR (AUTO - RX) ACTIVO        ");
     Serial.print  (">> MI MAC ADDRESS ES: ");
-    Serial.println(WiFi.macAddress());
+    imprimirMac();
     Serial.printf (">> Causa del último reinicio: %d (9 = brownout / caída de voltaje)\n",
                    (int)esp_reset_reason());
     Serial.println(">> Esperando paquetes de control...");
