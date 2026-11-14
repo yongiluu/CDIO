@@ -67,7 +67,7 @@ El proyecto está modularizado en dos bloques principales:
 * **Mando Analógico:** 2 Joysticks analógicos de dos ejes.
   * Eje Y (Velocidad / Tracción) -> **GPIO 34**
   * Eje X (Dirección / Ángulo) -> **GPIO 35**
-  * Botón del stick de potencia (pin `SW`, *fast brake*) -> **GPIO 32** (pull-up interno, el otro lado del botón a GND)
+  * Botón del stick de potencia (*fast brake*) -> **GPIO 25** (pull-down: el otro lado del botón a 3,3 V)
 * **Filtrado de Señal:**
   * Rango muerto calibrado entre `1400` y `2000` cuentas ADC para asegurar que el centro físico repose en `Velocidad = 0` y `Ángulo = 90°`.
 
@@ -81,7 +81,7 @@ Ambas placas intercambian la estructura binaria exacta:
 typedef struct MensajeDatos {
     int clave;     // 0xCD10: el RX descarta paquetes de otros dispositivos ESP-NOW
     int velocidad; // Rango: -255 a 255 (0 = detenido, >0 = adelante, <0 = reversa)
-    int angulo;    // Rango: -40° a +40° (0 = recto; el RX lo convierte a 50°-130° del servo)
+    int angulo;    // Rango: -30° a +30° del servo respecto al centro (0 = recto; centro en 50°, servo de 20° a 80°)
     int freno;     // 1 = fast brake (click en el stick de potencia)
 } MensajeDatos;
 ```

@@ -26,10 +26,13 @@ const uint32_t FRECUENCIA_PWM = 5000;  // Hz
 const uint8_t RESOLUCION_PWM = 8;      // 0 a 255
 
 // --- BATERÍA ---
-// Divisor de voltaje: Batería+ -> 50 kΩ -> GPIO 34 -> 10 kΩ -> GND
-// Vpin = Vbat * 10k / (50k + 10k) = Vbat / 6  (3S llena 12,6 V -> 2,1 V en el pin)
+// Divisor de voltaje: Batería+ -> R alta -> GPIO 34 -> 10 kΩ -> GND
+// Calibrado con multímetro: con factor 6 (50k/10k) marcaba 10,29 V con la
+// batería real en ~11,3 V. El factor medido es 6,6 (R alta de 56 kΩ):
+// Vpin = Vbat * 10k / (56k + 10k) = Vbat / 6,6  (3S llena 12,6 V -> 1,9 V en el pin)
+// Si vuelve a diferir del multímetro: FACTOR_nuevo = FACTOR * V_multímetro / V_mostrado
 const int PIN_BATERIA = 34;  // ADC1: funciona con el WiFi activo
-const float FACTOR_DIVISOR = (50000.0f + 10000.0f) / 10000.0f;
+const float FACTOR_DIVISOR = 6.6f;
 const unsigned long PERIODO_BATERIA_MS = 500;
 
 Servo servoDireccion;
@@ -41,7 +44,7 @@ const int CLAVE_CDIO = 0xCD10;
 typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
-    int angulo;    // -40 a 40 (0 = recto)
+    int angulo;    // grados del servo respecto al centro: -30 a 30 (0 = recto)
     int freno;     // 1 = fast brake (click en el stick de potencia), 0 = normal
 } MensajeDatos;
 
@@ -49,8 +52,10 @@ typedef struct MensajeDatos {
 const int CLAVE_TELEMETRIA = 0xCD11;
 
 typedef struct TelemetriaDatos {
-    int clave;       // CLAVE_TELEMETRIA
-    int bateria_mV;  // voltaje de la batería en milivoltios
+    int clave;          // CLAVE_TELEMETRIA
+    int bateria_mV;     // voltaje de la batería en milivoltios
+    int causaReinicio;  // esp_reset_reason() del último arranque (9 = brownout)
+    int encendido_ms;   // millis() del RX: si baja, el RX se reinició
 } TelemetriaDatos;
 
 uint8_t macControl[6];
@@ -73,17 +78,27 @@ bool enlaceActivo = false;
 bool frenando = false;
 
 // --- DIRECCIÓN ---
-// El TX envía -40 a +40; aquí se escala al recorrido real del servo.
-// GIRO_MAX_SERVO: grados que gira el servo a cada lado del centro. Subirlo da
-// más giro; si el servo zumba o se traba en los extremos, bajarlo.
-// CENTRO_SERVO: ajuste fino para que las ruedas queden rectas.
-// IMPORTANTE: el servo no debe llegar al tope mecánico de la dirección. Si choca,
-// se traba, consume mucha corriente (> 2 A) y deja de responder.
-const int GIRO_MAX_SERVO = 45;
-const int CENTRO_SERVO = 90;
-// Velocidad máxima del servo: grados por ciclo de 10 ms (5 -> 45° en ~90 ms).
-// Evita los saltos bruscos que generan picos de corriente.
-const int PASO_SERVO = 5;
+// El TX envía el ángulo en grados reales del servo respecto al centro (-30 a 30);
+// aquí solo se limita a GIRO_MAX_SERVO y se suma al centro.
+// CENTRO_SERVO: posición del servo con las ruedas rectas. Con el servo montado
+// en el auto y ajustado con el trim (+/-), las ruedas quedan rectas en 50°.
+// GIRO_MAX_SERVO: grados que gira el servo a cada lado del centro. Con más de
+// 30° la dirección topa con el chasis, el servo se fuerza y pide mucha corriente.
+// Recorrido resultante: servo de 20° a 80°.
+const int GIRO_MAX_SERVO = 30;
+const int CENTRO_SERVO = 50;
+// AJUSTE FINO DEL CENTRO (trim): con el monitor serie del RX abierto, cada '+'
+// suma 1° al centro y cada '-' resta 1°, al instante. Cuando las ruedas queden
+// rectas, copiar el valor que muestra el monitor en CENTRO_SERVO.
+int centroServo = CENTRO_SERVO;
+// El servo trabaja a 50 Hz (un pulso cada 20 ms): se le envía una orden por
+// pulso, no al ritmo del lazo del motor (10 ms).
+// INTERPOLACIÓN: PASO_SERVO son los grados que avanza por orden. El MG996R a
+// fondo hace ~7° cada 20 ms y pide su pico máximo de corriente (> 2 A), lo que
+// provocaba brownout. Con 2° va a ~1/3 de su velocidad y el pico de arranque
+// baja: 0 -> 30° en ~300 ms. Más alto = gira más rápido pero pide más corriente.
+const unsigned long PERIODO_SERVO_MS = 20;
+const int PASO_SERVO = 2;
 int servoObjetivo = CENTRO_SERVO;
 int servoActual = CENTRO_SERVO;
 
@@ -205,7 +220,8 @@ void enviarTelemetria(float voltaje) {
         controlEmparejado = true;
     }
 
-    TelemetriaDatos t = {CLAVE_TELEMETRIA, (int)(voltaje * 1000)};
+    TelemetriaDatos t = {CLAVE_TELEMETRIA, (int)(voltaje * 1000),
+                         (int)esp_reset_reason(), (int)millis()};
     esp_now_send(macControl, (uint8_t *)&t, sizeof(t));
 }
 
@@ -220,7 +236,7 @@ void setup() {
     // --------------------------------------
 
     Serial.begin(115200);
-    delay(1000);
+    delay(100);  // corto: si el auto se reinicia, vuelve a responder rápido
 
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
@@ -231,7 +247,7 @@ void setup() {
     servoDireccion.setPeriodHertz(50);
     ESP32PWM::allocateTimer(2);
     servoDireccion.attach(PIN_SERVO_DIR, 500, 2500);
-    servoDireccion.write(CENTRO_SERVO); // ruedas rectas
+    servoDireccion.write(centroServo); // ruedas rectas
 
     WiFi.mode(WIFI_STA);
 
@@ -277,10 +293,9 @@ void loop() {
         if (frenando) velocidadObjetivo = 0;
 
         // SERVO DE DIRECCIÓN
-        // -40 -> CENTRO - GIRO_MAX | 0 -> CENTRO (recto) | +40 -> CENTRO + GIRO_MAX
-        int angulo_dir = constrain(m.angulo, -40, 40);
-        servoObjetivo = constrain(CENTRO_SERVO + map(angulo_dir, -40, 40, -GIRO_MAX_SERVO, GIRO_MAX_SERVO),
-                                  0, 180);
+        // -30 -> CENTRO - 30 (20°) | 0 -> CENTRO (50°, recto) | +30 -> CENTRO + 30 (80°)
+        int angulo_dir = constrain(m.angulo, -GIRO_MAX_SERVO, GIRO_MAX_SERVO);
+        servoObjetivo = constrain(centroServo + angulo_dir, 0, 180);
 
         Serial.printf("Recibido -> Vel: %4d | Dirección: %3d° (Servo objetivo: %3d° | actual: %3d°)%s\n",
                       velocidadObjetivo, m.angulo, servoObjetivo, servoActual,
@@ -289,12 +304,23 @@ void loop() {
         digitalWrite(LED_PIN, LOW);
     }
 
+    // AJUSTE FINO DEL CENTRO desde el monitor serie: '+' suma 1°, '-' resta 1°
+    while (Serial.available() > 0) {
+        char c = Serial.read();
+        int delta = (c == '+') ? 1 : (c == '-') ? -1 : 0;
+        if (delta != 0) {
+            centroServo = constrain(centroServo + delta, GIRO_MAX_SERVO, 180 - GIRO_MAX_SERVO);
+            servoObjetivo = constrain(servoObjetivo + delta, 0, 180);
+            Serial.printf(">>> CENTRO DEL SERVO: %d°  (copiar este valor en CENTRO_SERVO)\n", centroServo);
+        }
+    }
+
     // FAILSAFE: si se pierde la señal del control, el auto se detiene
     if (enlaceActivo && millis() - tPaquete > TIEMPO_FAILSAFE_MS) {
         enlaceActivo = false;
         velocidadObjetivo = 0;
         frenando = false;
-        servoObjetivo = CENTRO_SERVO;
+        servoObjetivo = centroServo;
         Serial.println("⚠️ Sin señal del control: motor detenido (failsafe)");
     }
 
@@ -313,9 +339,11 @@ void loop() {
         aplicarMotor(velocidadActual);
     }
 
-    // SERVO con rampa: se acerca al objetivo de a PASO_SERVO grados y solo
-    // se actualiza cuando el ángulo cambia
-    if (servoActual != servoObjetivo) {
+    // SERVO a 50 Hz: una orden cada PERIODO_SERVO_MS, acercándose al objetivo
+    // de a PASO_SERVO grados, y solo cuando el ángulo cambia
+    static unsigned long ultimoServoMs = 0;
+    if (servoActual != servoObjetivo && millis() - ultimoServoMs >= PERIODO_SERVO_MS) {
+        ultimoServoMs = millis();
         if (servoActual < servoObjetivo) {
             servoActual = min(servoActual + PASO_SERVO, servoObjetivo);
         } else {

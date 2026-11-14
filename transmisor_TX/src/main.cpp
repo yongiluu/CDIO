@@ -19,7 +19,7 @@ const int CLAVE_CDIO = 0xCD10;
 typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
-    int angulo;    // -40 a 40 (0 = ruedas rectas)
+    int angulo;    // grados del servo respecto al centro: -30 a 30 (0 = ruedas rectas)
     int freno;     // 1 = fast brake (click en el stick de potencia), 0 = normal
 } MensajeDatos;
 
@@ -27,11 +27,16 @@ typedef struct MensajeDatos {
 const int CLAVE_TELEMETRIA = 0xCD11;
 
 typedef struct TelemetriaDatos {
-    int clave;       // CLAVE_TELEMETRIA
-    int bateria_mV;  // voltaje de la batería en milivoltios
+    int clave;          // CLAVE_TELEMETRIA
+    int bateria_mV;     // voltaje de la batería en milivoltios
+    int causaReinicio;  // esp_reset_reason() del último arranque del RX (9 = brownout)
+    int encendido_ms;   // millis() del RX: si baja, el RX se reinició
 } TelemetriaDatos;
 
 volatile int bateriaAuto_mV = -1;  // -1 = aún no llega telemetría
+volatile unsigned long ultimaTelemetriaMs = 0;
+volatile int ultimoEncendidoRx = -1;
+volatile int reinicioRxCausa = -1;  // >= 0: se detectó un reinicio del RX con esa causa
 const float VOLTAJE_MIN_CELDA = 3.5f;  // aviso de batería baja por celda
 
 MensajeDatos myData;
@@ -41,13 +46,13 @@ const int PIN_JOYSTICK_VELOCIDAD = 34; // Y
 const int PIN_JOYSTICK_ANGULO = 35;    // X
 
 // --- FAST BRAKE ---
-// Botón del stick de potencia (pin SW del joystick de velocidad): SW -> GPIO 32,
-// el otro lado del botón a GND. Se usa la resistencia pull-up interna, así que
-// suelto lee HIGH y presionado lee LOW.
+// Botón rojo de freno conectado en PULL-DOWN: un lado del botón a GPIO 25 y el
+// otro a 3,3 V. Se usa la resistencia pull-down interna (sirve igual si además
+// hay una externa a GND), así que suelto lee LOW y presionado lee HIGH.
 // Un click activa el freno y queda activo hasta que pasen FRENO_MIN_MS, se suelte
 // el botón y el stick de potencia vuelva al centro. Así un click corto igual frena
 // a fondo y el auto no vuelve a acelerar solo al soltar el botón.
-const int PIN_BOTON_FRENO = 32;
+const int PIN_BOTON_FRENO = 25;
 const unsigned long FRENO_MIN_MS = 500;
 bool frenoActivo = false;
 unsigned long inicioFrenoMs = 0;
@@ -88,14 +93,27 @@ bool validarCentro(int centro, const char *nombre) {
 const float EXPO_VELOCIDAD = 0.6;
 const float EXPO_DIRECCION = 0.5;
 
+// --- DIRECCIÓN ---
+// Giro máximo del servo a cada lado del centro, en grados reales. El RX lo
+// limita además con su propio GIRO_MAX_SERVO.
+const int ANGULO_MAX = 30;
+
+// --- EXTREMOS DEL JOYSTICK ---
+// Con el ESP32 a 3,3 V los joysticks no siempre llegan a 0 / 4095 a fondo.
+// El máximo se alcanza MARGEN_EXTREMO cuentas antes del final del recorrido,
+// así el stick a fondo siempre entrega el 100 % (dirección = 30° en el servo).
+const int MARGEN_EXTREMO = 400;
+
 // Convierte la lectura cruda (0-4095) a un valor entre -limite y +limite,
 // con 0 dentro de la zona muerta alrededor del centro medido
 int mapearEje(int crudo, int centro, int limite, float expo) {
     float n; // posición normalizada fuera de la zona muerta: -1.0 a 1.0
+    const int tope_alto = 4095 - MARGEN_EXTREMO;
+    const int tope_bajo = MARGEN_EXTREMO;
     if (crudo > centro + ZONA_MUERTA) {
-        n = (float)(crudo - centro - ZONA_MUERTA) / (4095 - centro - ZONA_MUERTA);
+        n = (float)(crudo - centro - ZONA_MUERTA) / (tope_alto - centro - ZONA_MUERTA);
     } else if (crudo < centro - ZONA_MUERTA) {
-        n = -(float)(centro - ZONA_MUERTA - crudo) / (centro - ZONA_MUERTA);
+        n = -(float)(centro - ZONA_MUERTA - crudo) / (centro - ZONA_MUERTA - tope_bajo);
     } else {
         return 0; // Zona Muerta
     }
@@ -109,11 +127,9 @@ void OnDataSent(const esp_now_send_info_t *info, esp_now_send_status_t status) {
 #else
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 #endif
-    if (status == ESP_NOW_SEND_SUCCESS) {
-        digitalWrite(LED_PIN, HIGH);
-        delay(5); 
-        digitalWrite(LED_PIN, LOW);
-    }
+    // Sin delay: este callback corre en la tarea del WiFi y no se debe bloquear.
+    // El LED queda encendido mientras los envíos llegan bien.
+    digitalWrite(LED_PIN, status == ESP_NOW_SEND_SUCCESS ? HIGH : LOW);
 }
 
 #if ESPNOW_RECV_V5
@@ -126,6 +142,12 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *datos, int len) {
     memcpy(&t, datos, sizeof(t));
     if (t.clave != CLAVE_TELEMETRIA) return;
     bateriaAuto_mV = t.bateria_mV;
+    ultimaTelemetriaMs = millis();
+    // El tiempo encendido del RX volvió a empezar: el auto se reinició
+    if (ultimoEncendidoRx >= 0 && t.encendido_ms < ultimoEncendidoRx) {
+        reinicioRxCausa = t.causaReinicio;
+    }
+    ultimoEncendidoRx = t.encendido_ms;
 }
 
 void setup() {
@@ -135,7 +157,7 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
     analogReadResolution(12); // Lee de 0 a 4095
-    pinMode(PIN_BOTON_FRENO, INPUT_PULLUP);
+    pinMode(PIN_BOTON_FRENO, INPUT_PULLDOWN);
 
     // Calibración del centro de los joysticks (deben estar sueltos al encender)
     centroVel = leerPromedio(PIN_JOYSTICK_VELOCIDAD, 64, 2);
@@ -187,8 +209,8 @@ void loop() {
     // 1. PROCESAR VELOCIDAD (-255 a 255, 0 = Detenido)
     myData.velocidad = mapearEje(crudo_vel, centroVel, 255, EXPO_VELOCIDAD);
 
-    // 2. PROCESAR ÁNGULO DE DIRECCIÓN (-40° a 40°, 0° = Recto)
-    myData.angulo = mapearEje(crudo_ang, centroAng, 40, EXPO_DIRECCION);
+    // 2. PROCESAR ÁNGULO DE DIRECCIÓN en grados reales del servo (0° = Recto)
+    myData.angulo = mapearEje(crudo_ang, centroAng, ANGULO_MAX, EXPO_DIRECCION);
 
     // Con la calibración fallida nunca se envía movimiento
     if (!joysticksOk) {
@@ -199,7 +221,7 @@ void loop() {
 
     // 3. FAST BRAKE con el click del stick de potencia
     // (se lee cada 50 ms, lo que ya filtra el rebote del botón)
-    bool botonPresionado = (digitalRead(PIN_BOTON_FRENO) == LOW);
+    bool botonPresionado = (digitalRead(PIN_BOTON_FRENO) == HIGH);
     if (botonPresionado && !frenoActivo) {
         frenoActivo = true;
         inicioFrenoMs = millis();
@@ -210,21 +232,33 @@ void loop() {
     myData.freno = frenoActivo ? 1 : 0;
     if (frenoActivo) {
         myData.velocidad = 0;  // mientras frena nunca se pide tracción
-        Serial.print("[FRENO] ");
     }
     
-    // Mostramos lecturas crudas, velocidad y ángulo relativo (-40° a +40°)
+    // AVISOS DEL AUTO: reinicio detectado o telemetría cortada
+    int causa = reinicioRxCausa;
+    if (causa >= 0) {
+        reinicioRxCausa = -1;
+        Serial.printf("\n⚠️⚠️ EL AUTO (RX) SE REINICIÓ. Causa: %d%s\n\n", causa,
+                      causa == 9 ? " = BROWNOUT (caída de voltaje: revisar alimentación del servo)" : "");
+    }
+    if (ultimaTelemetriaMs > 0 && millis() - ultimaTelemetriaMs > 1500) {
+        Serial.print("[SIN TELEMETRÍA DEL AUTO] ");
+    }
+
+    // Monitor: velocidad, ángulo del servo (grados reales), botón, freno y batería
+    Serial.printf("Vel: %4d | Ang: %3d° | Botón: %-7s | Freno: %-9s | ",
+                  myData.velocidad, myData.angulo,
+                  botonPresionado ? "APRETADO" : "suelto",
+                  frenoActivo ? "ACTIVO 🛑" : "no");
     int bat_mV = bateriaAuto_mV;
     if (bat_mV >= 0) {
         float voltaje = bat_mV / 1000.0f;
         int celdas = voltaje > 8.8f ? 3 : 2;  // 2S llena = 8,4 V | 3S descargada = 9,9 V
-        Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d° | Batería auto: %.2f V (%dS, %.2f V/celda)%s\n",
-                      crudo_vel, crudo_ang, myData.velocidad, myData.angulo,
+        Serial.printf("Batería auto: %.2f V (%dS, %.2f V/celda)%s\n",
                       voltaje, celdas, voltaje / celdas,
                       voltaje / celdas < VOLTAJE_MIN_CELDA ? "  ⚠️ BATERÍA BAJA" : "");
     } else {
-        Serial.printf("Crudo vel: %4d ang: %4d -> Vel: %4d | Ang: %3d° | Batería auto: --\n",
-                      crudo_vel, crudo_ang, myData.velocidad, myData.angulo);
+        Serial.println("Batería auto: --");
     }
     
     esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
