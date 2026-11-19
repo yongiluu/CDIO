@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE eagle SYSTEM "eagle.dtd">
+<eagle version="9.6.2">
+<drawing>
+<settings>
+<setting alwaysvectorfont="no"/>
+<setting verticaltext="up"/>
+</settings>
+<grid distance="0.635" unitdist="mm" unit="mm" style="lines" multiple="1" display="no" altdistance="0.127" altunitdist="mm" altunit="mm"/>
+<layers>
+<layer number="1" name="Top" color="4" fill="1" visible="yes" active="yes"/>
+<layer number="16" name="Bottom" color="1" fill="1" visible="yes" active="yes"/>
+<layer number="17" name="Pads" color="2" fill="1" visible="yes" active="yes"/>
+<layer number="18" name="Vias" color="2" fill="1" visible="yes" active="yes"/>
+<layer number="19" name="Unrouted" color="6" fill="1" visible="yes" active="yes"/>
+<layer number="20" name="Dimension" color="24" fill="1" visible="yes" active="yes"/>
+<layer number="21" name="tPlace" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="22" name="bPlace" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="23" name="tOrigins" color="15" fill="1" visible="yes" active="yes"/>
+<layer number="24" name="bOrigins" color="15" fill="1" visible="yes" active="yes"/>
+<layer number="25" name="tNames" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="26" name="bNames" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="27" name="tValues" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="28" name="bValues" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="29" name="tStop" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="30" name="bStop" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="31" name="tCream" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="32" name="bCream" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="35" name="tGlue" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="36" name="bGlue" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="39" name="tKeepout" color="4" fill="1" visible="yes" active="yes"/>
+<layer number="40" name="bKeepout" color="1" fill="1" visible="yes" active="yes"/>
+<layer number="41" name="tRestrict" color="4" fill="1" visible="yes" active="yes"/>
+<layer number="42" name="bRestrict" color="1" fill="1" visible="yes" active="yes"/>
+<layer number="43" name="vRestrict" color="2" fill="1" visible="yes" active="yes"/>
+<layer number="44" name="Drills" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="45" name="Holes" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="46" name="Milling" color="3" fill="1" visible="yes" active="yes"/>
+<layer number="47" name="Measures" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="48" name="Document" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="49" name="Reference" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="51" name="tDocu" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="52" name="bDocu" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="88" name="SimResults" color="9" fill="1" visible="yes" active="yes"/>
+<layer number="89" name="SimProbes" color="9" fill="1" visible="yes" active="yes"/>
+<layer number="90" name="Modules" color="5" fill="1" visible="yes" active="yes"/>
+<layer number="91" name="Nets" color="2" fill="1" visible="yes" active="yes"/>
+<layer number="92" name="Busses" color="1" fill="1" visible="yes" active="yes"/>
+<layer number="93" name="Pins" color="2" fill="1" visible="yes" active="yes"/>
+<layer number="94" name="Symbols" color="4" fill="1" visible="yes" active="yes"/>
+<layer number="95" name="Names" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="96" name="Values" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="97" name="Info" color="7" fill="1" visible="yes" active="yes"/>
+<layer number="98" name="Guide" color="6" fill="1" visible="yes" active="yes"/>
+</layers>
+<board>
+<plain>
+<wire x1="0" y1="0" x2="90" y2="0" width="0" layer="20"/>
+<wire x1="90" y1="0" x2="90" y2="60" width="0" layer="20"/>
+<wire x1="90" y1="60" x2="0" y2="60" width="0" layer="20"/>
+<wire x1="0" y1="60" x2="0" y2="0" width="0" layer="20"/>
+<hole x="4" y="4" drill="3.2"/>
+<hole x="86" y="4" drill="3.2"/>
+<hole x="4" y="56" drill="3.2"/>
+<hole x="86" y="56" drill="3.2"/>
+<text x="30" y="56.2" size="2.0" layer="21" ratio="12">CDIO - AUTO (RX) v1</text>
+<text x="12.6" y="50.5" size="1.2" layer="21" ratio="12">G25</text>
+<text x="12.6" y="45.4" size="1.2" layer="21" ratio="12">G26</text>
+<text x="12.6" y="40.3" size="1.2" layer="21" ratio="12">G27</text>
+<text x="12.6" y="31.5" size="1.2" layer="21" ratio="12">G13 SERVO</text>
+<text x="12.6" y="23.6" size="1.2" layer="21" ratio="12">G34 BAT</text>
+<text x="12.6" y="18.6" size="1.2" layer="21" ratio="12">ESP 5V</text>
+<text x="12.6" y="12.4" size="1.2" layer="21" ratio="12">ESP GND</text>
+<text x="66.5" y="50.5" size="1.2" layer="21" ratio="12">RPWM</text>
+<text x="66.5" y="45.4" size="1.2" layer="21" ratio="12">LPWM</text>
+<text x="66.5" y="36" size="1.2" layer="21" ratio="12">R_EN</text>
+<text x="76.2" y="32.2" size="1.2" layer="21" ratio="12">L_EN</text>
+<text x="76.2" y="27.1" size="1.2" layer="21" ratio="12">VCC</text>
+<text x="76.2" y="22" size="1.2" layer="21" ratio="12">GND</text>
+<text x="71.5" y="17" size="1.2" layer="21" ratio="12">SERVO S+-</text>
+<text x="21.5" y="1.2" size="1.2" layer="21" ratio="12">BAT+  GND</text>
+<text x="35.5" y="1.2" size="1.2" layer="21" ratio="12">IN+  IN-</text>
+<text x="51.5" y="1.2" size="1.2" layer="21" ratio="12">OUT+ OUT-</text>
+<text x="2" y="33" size="1.6" layer="21" ratio="12" rot="R90">ESP32</text>
+<text x="89" y="28" size="1.6" layer="21" ratio="12" rot="R90">BTS7960</text>
+</plain>
+<libraries>
+<library name="cdio">
+<packages>
+<package name="KF301-2">
+<description>Bornera de tornillo 2 polos, paso 5,08 mm (KF301-2P)</description>
+<pad name="1" x="0" y="0" drill="1.3" diameter="2.8" shape="round"/>
+<pad name="2" x="5.08" y="0" drill="1.3" diameter="2.8" shape="round"/>
+<wire x1="-2.54" y1="-4.1" x2="7.62" y2="-4.1" width="0.2" layer="21"/>
+<wire x1="7.62" y1="-4.1" x2="7.62" y2="3.5" width="0.2" layer="21"/>
+<wire x1="7.62" y1="3.5" x2="-2.54" y2="3.5" width="0.2" layer="21"/>
+<wire x1="-2.54" y1="3.5" x2="-2.54" y2="-4.1" width="0.2" layer="21"/>
+<wire x1="-2.54" y1="-2.8" x2="7.62" y2="-2.8" width="0.2" layer="21"/>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="KF301-3">
+<description>Bornera de tornillo 3 polos, paso 5,08 mm (KF301-3P)</description>
+<pad name="1" x="0" y="0" drill="1.3" diameter="2.8" shape="round"/>
+<pad name="2" x="5.08" y="0" drill="1.3" diameter="2.8" shape="round"/>
+<pad name="3" x="10.16" y="0" drill="1.3" diameter="2.8" shape="round"/>
+<wire x1="-2.54" y1="-4.1" x2="12.7" y2="-4.1" width="0.2" layer="21"/>
+<wire x1="12.7" y1="-4.1" x2="12.7" y2="3.5" width="0.2" layer="21"/>
+<wire x1="12.7" y1="3.5" x2="-2.54" y2="3.5" width="0.2" layer="21"/>
+<wire x1="-2.54" y1="3.5" x2="-2.54" y2="-4.1" width="0.2" layer="21"/>
+<wire x1="-2.54" y1="-2.8" x2="12.7" y2="-2.8" width="0.2" layer="21"/>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="HDR1X3">
+<description>Tira de 3 pines macho 2,54 mm (conector del servo)</description>
+<pad name="1" x="0" y="0" drill="1.0" diameter="1.9" shape="long" rot="R90"/>
+<pad name="2" x="2.54" y="0" drill="1.0" diameter="1.9" shape="long" rot="R90"/>
+<pad name="3" x="5.08" y="0" drill="1.0" diameter="1.9" shape="long" rot="R90"/>
+<wire x1="-1.27" y1="-2.2" x2="6.35" y2="-2.2" width="0.2" layer="21"/>
+<wire x1="6.35" y1="-2.2" x2="6.35" y2="2.2" width="0.2" layer="21"/>
+<wire x1="6.35" y1="2.2" x2="-1.27" y2="2.2" width="0.2" layer="21"/>
+<wire x1="-1.27" y1="2.2" x2="-1.27" y2="-2.2" width="0.2" layer="21"/>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="R-0207/5V">
+<description>Resistencia 1/4 W de pie, paso 5,08 mm</description>
+<pad name="1" x="0" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<pad name="2" x="5.08" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<circle x="0" y="0" radius="1.6" width="0.2" layer="21"/>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="R-0207/10">
+<description>Resistencia 1/4 W acostada, paso 10,16 mm</description>
+<pad name="1" x="0" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<pad name="2" x="10.16" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<wire x1="2.2" y1="-1.2" x2="7.96" y2="-1.2" width="0.2" layer="21"/>
+<wire x1="7.96" y1="-1.2" x2="7.96" y2="1.2" width="0.2" layer="21"/>
+<wire x1="7.96" y1="1.2" x2="2.2" y2="1.2" width="0.2" layer="21"/>
+<wire x1="2.2" y1="1.2" x2="2.2" y2="-1.2" width="0.2" layer="21"/>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="R-0207/15">
+<description>Resistencia 1/4 W acostada, paso 15,24 mm (pasa por encima de pistas)</description>
+<pad name="1" x="0" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<pad name="2" x="15.24" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<wire x1="4.5" y1="-1.2" x2="10.74" y2="-1.2" width="0.2" layer="21"/>
+<wire x1="10.74" y1="-1.2" x2="10.74" y2="1.2" width="0.2" layer="21"/>
+<wire x1="10.74" y1="1.2" x2="4.5" y2="1.2" width="0.2" layer="21"/>
+<wire x1="4.5" y1="1.2" x2="4.5" y2="-1.2" width="0.2" layer="21"/>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="C-5">
+<description>Condensador cerámico, paso 5,08 mm</description>
+<pad name="1" x="0" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<pad name="2" x="5.08" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<wire x1="1" y1="-1.5" x2="4.08" y2="-1.5" width="0.2" layer="21"/>
+<wire x1="4.08" y1="-1.5" x2="4.08" y2="1.5" width="0.2" layer="21"/>
+<wire x1="4.08" y1="1.5" x2="1" y2="1.5" width="0.2" layer="21"/>
+<wire x1="1" y1="1.5" x2="1" y2="-1.5" width="0.2" layer="21"/>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="CPOL-5-D8">
+<description>Electrolítico Ø8 mm, paso 5,08 mm (pad 1 = +)</description>
+<pad name="1" x="0" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<pad name="2" x="5.08" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<circle x="2.54" y="0" radius="4" width="0.2" layer="21"/>
+<text x="-1.6" y="1.4" size="1.2" layer="21">+</text>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+<package name="CPOL-5-D10">
+<description>Electrolítico Ø10 mm, paso 5,08 mm (pad 1 = +)</description>
+<pad name="1" x="0" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<pad name="2" x="5.08" y="0" drill="1.0" diameter="2.4" shape="round"/>
+<circle x="2.54" y="0" radius="5" width="0.2" layer="21"/>
+<text x="-1.6" y="1.4" size="1.2" layer="21">+</text>
+<text x="0" y="4.2" size="1.2" layer="25">&gt;NAME</text>
+<text x="0" y="-5.6" size="1" layer="27">&gt;VALUE</text>
+</package>
+</packages>
+</library>
+</libraries>
+<attributes>
+</attributes>
+<variantdefs>
+</variantdefs>
+<classes>
+<class number="0" name="default" width="0" drill="0">
+</class>
+</classes>
+<designrules name="cdio_cnc">
+<param name="layerSetup" value="(1*16)"/>
+<param name="mtCopper" value="0.035mm 0.035mm"/>
+<param name="mtIsolate" value="1.5mm"/>
+<param name="mdWireWire" value="0.6mm"/>
+<param name="mdWirePad" value="0.6mm"/>
+<param name="mdWireVia" value="0.6mm"/>
+<param name="mdPadPad" value="0.6mm"/>
+<param name="mdPadVia" value="0.6mm"/>
+<param name="mdViaVia" value="0.6mm"/>
+<param name="mdSmdPad" value="0.6mm"/>
+<param name="mdSmdVia" value="0.6mm"/>
+<param name="mdSmdSmd" value="0.6mm"/>
+<param name="mdCopperDimension" value="0.5mm"/>
+<param name="mdDrill" value="0.4mm"/>
+<param name="msWidth" value="0.8mm"/>
+<param name="msDrill" value="0.8mm"/>
+<param name="rvPadTop" value="0.25"/>
+<param name="rvPadInner" value="0.25"/>
+<param name="rvPadBottom" value="0.25"/>
+<param name="rlMinPadTop" value="0.4mm"/>
+<param name="rlMaxPadTop" value="20mm"/>
+<param name="rlMinPadInner" value="0.4mm"/>
+<param name="rlMaxPadInner" value="20mm"/>
+<param name="rlMinPadBottom" value="0.4mm"/>
+<param name="rlMaxPadBottom" value="20mm"/>
+<param name="psElongationLong" value="100"/>
+<param name="psElongationOffset" value="100"/>
+</designrules>
+<autorouter>
+</autorouter>
+<elements>
+<element name="J1" library="cdio" package="KF301-2" value="BATERIA" x="24" y="8"/>
+<element name="J2" library="cdio" package="KF301-2" value="LM2596_IN" x="38" y="8"/>
+<element name="J3" library="cdio" package="KF301-2" value="LM2596_OUT" x="54" y="8"/>
+<element name="J5" library="cdio" package="KF301-3" value="ESP32_MOTOR" x="9" y="50" rot="R270"/>
+<element name="J6" library="cdio" package="KF301-2" value="ESP32_SERVO_BAT" x="9" y="31" rot="R270"/>
+<element name="J4" library="cdio" package="KF301-2" value="ESP32_POWER" x="9" y="17" rot="R270"/>
+<element name="J7" library="cdio" package="KF301-3" value="BTS7960_A" x="81" y="39.84" rot="R90"/>
+<element name="J8" library="cdio" package="KF301-3" value="BTS7960_B" x="81" y="20.84" rot="R90"/>
+<element name="J9" library="cdio" package="HDR1X3" value="SERVO" x="82" y="10" rot="R90"/>
+<element name="R1" library="cdio" package="R-0207/15" value="56k" x="32" y="13" rot="R90"/>
+<element name="R2" library="cdio" package="R-0207/5V" value="10k" x="26" y="28.24" rot="R270"/>
+<element name="C1" library="cdio" package="C-5" value="100nF" x="20" y="28.24" rot="R270"/>
+<element name="R3" library="cdio" package="R-0207/15" value="10k" x="20" y="50" rot="R270"/>
+<element name="R4" library="cdio" package="R-0207/10" value="10k" x="26" y="44.92" rot="R270"/>
+<element name="R5" library="cdio" package="R-0207/5V" value="10k" x="32" y="39.84" rot="R270"/>
+<element name="C3" library="cdio" package="CPOL-5-D8" value="100uF" x="17" y="17" rot="R270"/>
+<element name="C2" library="cdio" package="CPOL-5-D10" value="1000uF" x="67" y="12.54" rot="R270"/>
+</elements>
+<signals>
+<signal name="5V">
+<contactref element="J3" pad="1"/>
+<contactref element="J4" pad="1"/>
+<contactref element="J8" pad="2"/>
+<contactref element="J9" pad="2"/>
+<contactref element="C3" pad="1"/>
+<contactref element="C2" pad="1"/>
+<wire x1="9" y1="17" x2="17" y2="17" width="2.0" layer="16"/>
+<wire x1="17" y1="17" x2="54" y2="17" width="2.0" layer="16"/>
+<wire x1="54" y1="17" x2="54" y2="12.54" width="2.0" layer="16"/>
+<wire x1="54" y1="12.54" x2="54" y2="8" width="2.0" layer="16"/>
+<wire x1="54" y1="12.54" x2="67" y2="12.54" width="2.0" layer="16"/>
+<wire x1="67" y1="12.54" x2="75" y2="12.54" width="2.0" layer="16"/>
+<wire x1="75" y1="12.54" x2="82" y2="12.54" width="1.6" layer="16"/>
+<wire x1="82" y1="12.54" x2="87" y2="12.54" width="1.6" layer="16"/>
+<wire x1="87" y1="12.54" x2="87" y2="25.92" width="2.0" layer="16"/>
+<wire x1="87" y1="25.92" x2="81" y2="25.92" width="2.0" layer="16"/>
+</signal>
+<signal name="EN">
+<contactref element="J5" pad="3"/>
+<contactref element="J7" pad="1"/>
+<contactref element="J8" pad="3"/>
+<contactref element="R5" pad="1"/>
+<wire x1="9" y1="39.84" x2="32" y2="39.84" width="1.0" layer="16"/>
+<wire x1="32" y1="39.84" x2="75" y2="39.84" width="1.0" layer="16"/>
+<wire x1="75" y1="39.84" x2="81" y2="39.84" width="1.0" layer="16"/>
+<wire x1="75" y1="39.84" x2="75" y2="31" width="1.0" layer="16"/>
+<wire x1="75" y1="31" x2="81" y2="31" width="1.0" layer="16"/>
+</signal>
+<signal name="GND">
+<contactref element="J1" pad="2"/>
+<contactref element="J2" pad="2"/>
+<contactref element="J3" pad="2"/>
+<contactref element="J4" pad="2"/>
+<contactref element="J8" pad="1"/>
+<contactref element="J9" pad="1"/>
+<contactref element="R2" pad="2"/>
+<contactref element="C1" pad="2"/>
+<contactref element="R3" pad="2"/>
+<contactref element="R4" pad="2"/>
+<contactref element="R5" pad="2"/>
+<contactref element="C3" pad="2"/>
+<contactref element="C2" pad="2"/>
+<polygon width="0.5" layer="16" isolate="0.8" orphans="no" thermals="yes" rank="1">
+<vertex x="0.6" y="0.6"/>
+<vertex x="89.4" y="0.6"/>
+<vertex x="89.4" y="59.4"/>
+<vertex x="0.6" y="59.4"/>
+</polygon>
+</signal>
+<signal name="LPWM">
+<contactref element="J5" pad="2"/>
+<contactref element="J7" pad="2"/>
+<contactref element="R4" pad="1"/>
+<wire x1="9" y1="44.92" x2="26" y2="44.92" width="1.0" layer="16"/>
+<wire x1="26" y1="44.92" x2="81" y2="44.92" width="1.0" layer="16"/>
+</signal>
+<signal name="RPWM">
+<contactref element="J5" pad="1"/>
+<contactref element="J7" pad="3"/>
+<contactref element="R3" pad="1"/>
+<wire x1="9" y1="50" x2="20" y2="50" width="1.0" layer="16"/>
+<wire x1="20" y1="50" x2="81" y2="50" width="1.0" layer="16"/>
+</signal>
+<signal name="SERVO">
+<contactref element="J6" pad="1"/>
+<contactref element="J9" pad="3"/>
+<wire x1="9" y1="31" x2="70" y2="31" width="1.0" layer="16"/>
+<wire x1="70" y1="31" x2="70" y2="15.08" width="1.0" layer="16"/>
+<wire x1="70" y1="15.08" x2="82" y2="15.08" width="1.0" layer="16"/>
+</signal>
+<signal name="VBAT">
+<contactref element="J1" pad="1"/>
+<contactref element="J2" pad="1"/>
+<contactref element="R1" pad="1"/>
+<wire x1="24" y1="8" x2="24" y2="13" width="2.0" layer="16"/>
+<wire x1="24" y1="13" x2="32" y2="13" width="2.0" layer="16"/>
+<wire x1="32" y1="13" x2="38" y2="13" width="2.0" layer="16"/>
+<wire x1="38" y1="13" x2="38" y2="8" width="2.0" layer="16"/>
+</signal>
+<signal name="VSENSE">
+<contactref element="J6" pad="2"/>
+<contactref element="R1" pad="2"/>
+<contactref element="R2" pad="1"/>
+<contactref element="C1" pad="1"/>
+<wire x1="32" y1="28.24" x2="26" y2="28.24" width="1.0" layer="16"/>
+<wire x1="26" y1="28.24" x2="20" y2="28.24" width="1.0" layer="16"/>
+<wire x1="20" y1="28.24" x2="13" y2="28.24" width="1.0" layer="16"/>
+<wire x1="13" y1="28.24" x2="9" y2="25.92" width="1.0" layer="16"/>
+</signal>
+</signals>
+</board>
+</drawing>
+</eagle>

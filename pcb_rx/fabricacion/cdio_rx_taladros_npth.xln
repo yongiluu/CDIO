@@ -1,0 +1,14 @@
+M48
+; CDIO - PCB del auto (RX)
+METRIC,TZ
+; Sin metalizado (fijacion M3)
+T1C3.200
+%
+G90
+G05
+T1
+X4.000Y4.000
+X86.000Y4.000
+X4.000Y56.000
+X86.000Y56.000
+M30

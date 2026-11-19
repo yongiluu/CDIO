@@ -1,0 +1,22 @@
+PCB DEL AUTO (RX) - PROYECTO CDIO
+=================================
+
+Placa de una capa para fresar en CNC.
+
+Tamano ............ 90 x 60 mm
+Capa de cobre ..... SOLO Bottom (los componentes van por el lado sin cobre)
+Pistas ............ 1,0 mm (senales) y 2,0 mm (potencia)
+Separacion min. ... 0,6 mm entre cobres distintos
+Plano de GND ...... rellena el resto del cobre, a 0,8 mm de las pistas
+
+Archivos
+--------
+cdio_rx_cobre_bottom.gbr    Cobre Bottom. Esta dibujado visto desde ARRIBA:
+                            para fresar por el lado de abajo hay que ESPEJARLO
+                            (mirror en X) en el software del CNC.
+cdio_rx_contorno.gbr        Contorno de corte de la placa.
+cdio_rx_taladros_pth.xln    Taladros de componentes: 1,0 mm y 1,3 mm.
+cdio_rx_taladros_npth.xln   4 agujeros de fijacion de 3,2 mm (tornillos M3).
+vista_cobre_bottom.png      Imagen de referencia del cobre.
+
+Unidades: milimetros. Origen (0,0) en la esquina inferior izquierda.

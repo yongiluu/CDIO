@@ -3,3 +3,4 @@
 .DS_Store
 *.bin
 *.elf
+__pycache__/
