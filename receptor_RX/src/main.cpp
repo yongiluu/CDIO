@@ -44,7 +44,7 @@ const int CLAVE_CDIO = 0xCD10;
 typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
-    int angulo;    // grados del servo respecto al centro: -30 a 30 (0 = recto)
+    int angulo;    // grados del servo respecto al centro: -38 a 38 (0 = recto)
     int freno;     // 1 = fast brake (click en el stick de potencia), 0 = normal
 } MensajeDatos;
 
@@ -78,14 +78,15 @@ bool enlaceActivo = false;
 bool frenando = false;
 
 // --- DIRECCIÓN ---
-// El TX envía el ángulo en grados reales del servo respecto al centro (-30 a 30);
+// El TX envía el ángulo en grados reales del servo respecto al centro (-38 a 38);
 // aquí solo se limita a GIRO_MAX_SERVO y se suma al centro.
 // CENTRO_SERVO: posición del servo con las ruedas rectas. Con el servo montado
 // en el auto y ajustado con el trim (+/-), las ruedas quedan rectas en 50°.
 // GIRO_MAX_SERVO: grados que gira el servo a cada lado del centro. Con más de
-// 30° la dirección topa con el chasis, el servo se fuerza y pide mucha corriente.
-// Recorrido resultante: servo de 20° a 80°.
-const int GIRO_MAX_SERVO = 30;
+// 38° la dirección puede topar con el chasis: si el servo zumba o se fuerza en
+// los extremos, bajar este valor (y ANGULO_MAX en el TX). Antes estaba en 30°.
+// Recorrido resultante: servo de 12° a 88°.
+const int GIRO_MAX_SERVO = 38;
 const int CENTRO_SERVO = 50;
 // AJUSTE FINO DEL CENTRO (trim): con el monitor serie del RX abierto, cada '+'
 // suma 1° al centro y cada '-' resta 1°, al instante. Cuando las ruedas queden
@@ -293,7 +294,7 @@ void loop() {
         if (frenando) velocidadObjetivo = 0;
 
         // SERVO DE DIRECCIÓN
-        // -30 -> CENTRO - 30 (20°) | 0 -> CENTRO (50°, recto) | +30 -> CENTRO + 30 (80°)
+        // -38 -> CENTRO - 38 (12°) | 0 -> CENTRO (50°, recto) | +38 -> CENTRO + 38 (88°)
         int angulo_dir = constrain(m.angulo, -GIRO_MAX_SERVO, GIRO_MAX_SERVO);
         servoObjetivo = constrain(centroServo + angulo_dir, 0, 180);
 

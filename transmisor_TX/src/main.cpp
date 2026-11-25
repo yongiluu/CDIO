@@ -19,7 +19,7 @@ const int CLAVE_CDIO = 0xCD10;
 typedef struct MensajeDatos {
     int clave;     // CLAVE_CDIO
     int velocidad; // -255 a 255 (0 = detenido)
-    int angulo;    // grados del servo respecto al centro: -30 a 30 (0 = ruedas rectas)
+    int angulo;    // grados del servo respecto al centro: -38 a 38 (0 = ruedas rectas)
     int freno;     // 1 = fast brake (click en el stick de potencia), 0 = normal
 } MensajeDatos;
 
@@ -96,12 +96,12 @@ const float EXPO_DIRECCION = 0.5;
 // --- DIRECCIÓN ---
 // Giro máximo del servo a cada lado del centro, en grados reales. El RX lo
 // limita además con su propio GIRO_MAX_SERVO.
-const int ANGULO_MAX = 30;
+const int ANGULO_MAX = 38;
 
 // --- EXTREMOS DEL JOYSTICK ---
 // Con el ESP32 a 3,3 V los joysticks no siempre llegan a 0 / 4095 a fondo.
 // El máximo se alcanza MARGEN_EXTREMO cuentas antes del final del recorrido,
-// así el stick a fondo siempre entrega el 100 % (dirección = 30° en el servo).
+// así el stick a fondo siempre entrega el 100 % (dirección = 38° en el servo).
 const int MARGEN_EXTREMO = 400;
 
 // Convierte la lectura cruda (0-4095) a un valor entre -limite y +limite,
