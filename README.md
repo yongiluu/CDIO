@@ -55,6 +55,7 @@ El proyecto está modularizado en dos bloques principales:
   * `PIN_RPWM` -> **GPIO 25** (Canal PWM 0)
   * `PIN_LPWM` -> **GPIO 26** (Canal PWM 1)
   * `PIN_EN` (R_EN y L_EN unificados) -> **GPIO 27**
+  * Potencia limitada a **50 % de PWM** (`PWM_MAX_PCT` en `receptor_RX/src/main.cpp`): el stick a fondo entrega 127 de 255, porque el motor 540 es de 7,2 V y la LiPo 3S llega a 12,6 V.
 * **Servomotor de Dirección:** SG90 / MG996R (50 Hz).
   * `PIN_SERVO_DIR` -> **GPIO 13**
 * **Sistema de Alimentación:**
