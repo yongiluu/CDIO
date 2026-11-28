@@ -103,12 +103,21 @@ const int PASO_SERVO = 2;
 int servoObjetivo = CENTRO_SERVO;
 int servoActual = CENTRO_SERVO;
 
+// --- LÍMITE DE POTENCIA DEL MOTOR ---
+// El motor 540 es de 7,2 V y la LiPo 3S entrega hasta 12,6 V: a PWM 100 % el
+// motor y el BTS7960 trabajan sobre su valor nominal. El recorrido COMPLETO del
+// stick se escala a 0..PWM_MAX_PCT (no se satura): stick a fondo = PWM_MAX_PCT %,
+// stick a la mitad = la mitad de eso. Para más potencia, subir PWM_MAX_PCT.
+const int PWM_MAX_PCT = 50;
+const int PWM_MAX = (255 * PWM_MAX_PCT) / 100;  // 50 % -> 127 de 255
+
 // --- RAMPA DE VELOCIDAD ---
 // Limita el cambio de PWM por ciclo: la velocidad sube de a poco (más control)
 // y se evitan picos de corriente que bajan el voltaje y reinician el ESP32
 // (brownout). Soltar el stick (velocidad 0) y el fast brake son inmediatos.
 // PASO_ACELERAR: subir la velocidad. Antes era 15 (0 a 255 en ~170 ms, se
-// sentía de 0 a 100 de golpe). Con 3 -> 0 a 255 en ~0,85 s, subida lineal.
+// sentía de 0 a 100 de golpe). Con 3 -> 0 a 255 en ~0,85 s, subida lineal
+// (con PWM_MAX_PCT = 50 el tope es 127, al que llega en ~0,42 s).
 // Más bajo = acelera más suave; más alto = más brusco.
 // PASO_DESACELERAR: bajar la velocidad sin soltar el stick (más rápido que
 // acelerar para que el auto responda al levantar el dedo).
@@ -265,6 +274,7 @@ void setup() {
     Serial.println(WiFi.macAddress());
     Serial.printf (">> Causa del último reinicio: %d (9 = brownout / caída de voltaje)\n",
                    (int)esp_reset_reason());
+    Serial.printf (">> PWM máximo del motor: %d %% (%d de 255)\n", PWM_MAX_PCT, PWM_MAX);
     Serial.println(">> Esperando paquetes de control...");
     Serial.println("==========================================\n");
 
@@ -292,7 +302,8 @@ void loop() {
         enlaceActivo = true;
         digitalWrite(LED_PIN, HIGH);
 
-        velocidadObjetivo = constrain(m.velocidad, -255, 255);
+        // Escala -255..255 del control a -PWM_MAX..PWM_MAX (límite de potencia)
+        velocidadObjetivo = (constrain(m.velocidad, -255, 255) * PWM_MAX) / 255;
 
         bool frenoPedido = (m.freno != 0);
         if (frenoPedido && !frenando) Serial.println("🛑 FAST BRAKE activado");
@@ -352,7 +363,7 @@ void loop() {
                 velocidadActual = max(velocidadActual - paso, velocidadObjetivo);
             }
         }
-        aplicarMotor(velocidadActual);
+        aplicarMotor(constrain(velocidadActual, -PWM_MAX, PWM_MAX));
     }
 
     // SERVO a 50 Hz: una orden cada PERIODO_SERVO_MS, acercándose al objetivo
