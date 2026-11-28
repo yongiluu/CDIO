@@ -90,7 +90,11 @@ bool validarCentro(int centro, const char *nombre) {
 // --- SENSIBILIDAD (EXPO) ---
 // Curva tipo control RC: cerca del centro la respuesta es suave y al final del
 // recorrido llega igual al máximo. 0.0 = lineal, 1.0 = muy suave al centro.
-const float EXPO_VELOCIDAD = 0.6;
+// Velocidad LINEAL: con expo 0.6 casi todo el aumento quedaba en el último
+// tramo del stick y la velocidad saltaba de lenta a máxima. Ahora cada parte
+// del recorrido suma lo mismo (stick a la mitad = media velocidad).
+// La aceleración gradual la hace la rampa del RX (PASO_ACELERAR).
+const float EXPO_VELOCIDAD = 0.0;
 const float EXPO_DIRECCION = 0.5;
 
 // --- DIRECCIÓN ---

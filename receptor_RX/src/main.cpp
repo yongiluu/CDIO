@@ -104,9 +104,16 @@ int servoObjetivo = CENTRO_SERVO;
 int servoActual = CENTRO_SERVO;
 
 // --- RAMPA DE VELOCIDAD ---
-// Limita el cambio de PWM por ciclo para evitar picos de corriente que
-// bajan el voltaje y reinician el ESP32 (brownout). Frenar es inmediato.
-const int PASO_RAMPA = 15;  // cada 10 ms -> 0 a 255 en ~170 ms
+// Limita el cambio de PWM por ciclo: la velocidad sube de a poco (más control)
+// y se evitan picos de corriente que bajan el voltaje y reinician el ESP32
+// (brownout). Soltar el stick (velocidad 0) y el fast brake son inmediatos.
+// PASO_ACELERAR: subir la velocidad. Antes era 15 (0 a 255 en ~170 ms, se
+// sentía de 0 a 100 de golpe). Con 3 -> 0 a 255 en ~0,85 s, subida lineal.
+// Más bajo = acelera más suave; más alto = más brusco.
+// PASO_DESACELERAR: bajar la velocidad sin soltar el stick (más rápido que
+// acelerar para que el auto responda al levantar el dedo).
+const int PASO_ACELERAR = 3;      // cada 10 ms
+const int PASO_DESACELERAR = 10;  // cada 10 ms -> 255 a 0 en ~0,25 s
 int velocidadObjetivo = 0;
 int velocidadActual = 0;
 
@@ -332,10 +339,18 @@ void loop() {
     } else {
         if (velocidadObjetivo == 0) {
             velocidadActual = 0;
-        } else if (velocidadActual < velocidadObjetivo) {
-            velocidadActual = min(velocidadActual + PASO_RAMPA, velocidadObjetivo);
-        } else if (velocidadActual > velocidadObjetivo) {
-            velocidadActual = max(velocidadActual - PASO_RAMPA, velocidadObjetivo);
+        } else if (velocidadActual != velocidadObjetivo) {
+            // Acelera si el objetivo pide más velocidad en el mismo sentido;
+            // si pide menos o el sentido contrario, primero desacelera hasta 0.
+            bool mismoSentido = velocidadActual == 0 ||
+                                (velocidadActual > 0) == (velocidadObjetivo > 0);
+            bool acelerando = mismoSentido && abs(velocidadObjetivo) > abs(velocidadActual);
+            int paso = acelerando ? PASO_ACELERAR : PASO_DESACELERAR;
+            if (velocidadActual < velocidadObjetivo) {
+                velocidadActual = min(velocidadActual + paso, velocidadObjetivo);
+            } else {
+                velocidadActual = max(velocidadActual - paso, velocidadObjetivo);
+            }
         }
         aplicarMotor(velocidadActual);
     }
